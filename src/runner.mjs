@@ -7,6 +7,7 @@ import {loadPi,selectedRuntime,resourceLoader,skillText} from './runtime.mjs';
 import {profileFor,verifyWire} from './profiles.mjs';
 import {openWeb,webTools} from './web.mjs';
 import {SYSTEM,TASKS,handoff} from './prompts.mjs';
+import {readMany,selectBrief} from './evidence_views.mjs';
 
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const txt=value=>({content:[{type:'text',text:JSON.stringify(value)}],details:{}});
@@ -16,6 +17,16 @@ export function localTools(Type, {packet,archive,role,readEvidenceIds,readSource
     level:Type.Union(['observation','association','biological_hypothesis'].map(x=>Type.Literal(x))),
     evidence_ids:Type.Array(Type.String(),{minItems:1}),source_ids:Type.Array(Type.String())});
   return [
+    {name:'evidence_brief',label:'Read feature summary',description:'Read all exported E.* summary records together as lossless tables. Includes taxonomy, environment, abundance, community and controls; excludes selected case records. No values rounded or recomputed. Follow remaining_ids if present.',
+      parameters:Type.Object({}),execute:async()=>{
+        const ids=Object.keys(selectBrief(packet));
+        const value=ids.length?readMany(packet,ids.slice(0,64)):{read_ids:[],remaining_ids:[]};
+        value.remaining_ids.push(...ids.slice(64));
+        value.read_ids.forEach(id=>readEvidenceIds.add(id));return txt(value);
+      }},
+    {name:'evidence_read_many',label:'Read selected evidence',description:'Read 1–64 selected exact records in one lossless table bundle (18,000 character cap). remaining_ids are NOT read. Prefer this to dozens of individual calls; use evidence_read for a large record or JSON Pointer.',
+      parameters:Type.Object({ids:Type.Array(Type.String(),{minItems:1,maxItems:64})}),
+      execute:async(_id,{ids})=>{const value=readMany(packet,ids);value.read_ids.forEach(id=>readEvidenceIds.add(id));return txt(value);}},
     {name:'evidence_list',label:'Evidence index',description:'List exact evidence IDs by prefix (E.taxonomy, E.abundance, E.community, X.case, X.control, etc.).',
       parameters:Type.Object({prefix:Type.Optional(Type.String()),offset:Type.Optional(Type.Integer({minimum:0}))}),
       execute:async(_id,{prefix='',offset=0})=>{
@@ -39,7 +50,7 @@ export function localTools(Type, {packet,archive,role,readEvidenceIds,readSource
           if(!readSources.has(id))throw new Error('Audit must independently read every source it cites');
         if(role==='audit')for(const c of candidate?.claims??[])for(const id of c.source_ids)
           if(!readSources.has(id))throw new Error('Audit must read the candidate source citations, including disputed claims');
-        setReport(p);return txt({accepted:true,note:'Structural validation only; stop now.'});
+        setReport(p);return {...txt({accepted:true,note:'Structural validation only; role complete.'}),terminate:true};
       }},
   ];
 }
@@ -57,7 +68,7 @@ async function runRole(pi, env, role) {
         feature_provider_turns_remaining:budget.limits.requests-budget.used.requests,
         reminder:'Reserve a turn for submit_report. Stop exploring when sufficient evidence exists.'})}]};
     }}));
-  const prompt=`${TASKS[role]}\n\nBUDGET: At most ${budget.limits.roleRequests} provider turns for this role, including submission and acknowledgement. Aim to submit by turn 7; leave room for validation corrections. Group independent tool calls. Read selectively, not every record: start with the most informative taxa and contexts, then test a competing explanation.\n\nFEATURE OVERVIEW:\n${JSON.stringify(overview(packet))}\n\nPRIOR ROLE REPORTS (fallible):\n${JSON.stringify(handoff(role,reports))}\n\nSOURCE INDEX:\n${JSON.stringify(archive.list())}`;
+  const prompt=`${TASKS[role]}\n\nBUDGET: At most ${budget.limits.roleRequests} provider turns for this role. Submit alone in its final tool batch; successful submission ends the role without an acknowledgement request. Group independent reads with evidence_read_many. The observer should start with evidence_brief; other roles should read the exact records needed for their own checks, not reconstruct the entire inventory. The full skills and exact source evidence remain authoritative.\n\nFEATURE OVERVIEW:\n${JSON.stringify(overview(packet))}\n\nPRIOR ROLE REPORTS (fallible):\n${JSON.stringify(handoff(role,reports))}\n\nSOURCE INDEX:\n${JSON.stringify(archive.list())}`;
   checkPrivacy(prompt,forbidden);
   // Pi appends cwd to the system prompt. No filesystem tools are exposed, so use
   // a virtual public label; keep the real session/output directories host-side.
@@ -124,7 +135,7 @@ export async function run({packetPath,out,live=false,web=false,authPath,modelNam
   const skills=await skillText(ROOT);
   await save(join(out,'packet.json'),packet);
   await save(join(out,'overview.json'),overview(packet));
-  const files=['package.json','src/cli.mjs','src/core.mjs','src/runtime.mjs','src/web.mjs','src/runner.mjs','src/prompts.mjs','src/profiles.mjs',
+  const files=['package.json','src/cli.mjs','src/core.mjs','src/runtime.mjs','src/web.mjs','src/runner.mjs','src/prompts.mjs','src/profiles.mjs','src/evidence_views.mjs',
     'skills/sae-interpretation/SKILL.md','skills/source-grounding/SKILL.md'];
   const code_hashes=Object.fromEntries(await Promise.all(files.map(async f=>[f,hash(await readFile(join(ROOT,f),'utf8'))])));
   const budget=new Budget();

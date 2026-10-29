@@ -11,6 +11,7 @@ import {run,localTools} from '../src/runner.mjs';
 import {profileFor,verifyWire,scopedOAuthStore} from '../src/profiles.mjs';
 import {canonicalUsage,sumCanonical} from '../src/accounting.mjs';
 import {skillText} from '../src/runtime.mjs';
+import {packRecords,unpackRecords,readMany,selectBrief} from '../src/evidence_views.mjs';
 import {fileURLToPath} from 'node:url';
 
 const bundle=()=>({core:{feature_id:7,site:'otu_l4',k:16,
@@ -34,6 +35,21 @@ test('normalize preserves evidence and distinct denominators; removes old labels
   assert.ok(p.records['X.case.EVENT_1']);assert.ok(p.records['X.control.joint']);
   assert.ok(!JSON.stringify(p).includes('DO NOT SEND'));
   assert.ok(!JSON.stringify(overview(p)).includes('group_given_active'));
+});
+test('table transport is lossless including precision, null, zero and interpretation',()=>{
+  const records={'E.a':{value:{category:'a',rate:0.001100070631,missing:null,count:0},interpretation:'P(active|group)'},
+    'E.b':{value:{category:'b',rate:0.99,missing:null,count:2},interpretation:'P(active|group)'},
+    'E.c':{value:{nested:{n:9}},interpretation:'Nested scope'},'E.d':{value:[1,2],extra:true}};
+  const view=packRecords(records);assert.equal(view.tables.length,1);
+  assert.deepEqual(unpackRecords(view),records);
+});
+test('bulk reads never silently truncate records or count omitted IDs as read',()=>{
+  const packet={records:{'E.a':{value:'short'},'E.big':{value:'x'.repeat(2000)},'E.c':{value:3},'E.case.test':{value:4}}};
+  const view=readMany(packet,['E.a','E.big','E.c'],{maxChars:500});
+  assert.deepEqual(view.read_ids,['E.a']);assert.deepEqual(view.remaining_ids,['E.big','E.c']);
+  assert.deepEqual(unpackRecords(view),{'E.a':packet.records['E.a']});
+  assert.throws(()=>readMany(packet,['missing']));assert.throws(()=>readMany(packet,['E.a','E.a']));
+  assert.ok(!('E.case.test' in selectBrief(packet)));
 });
 test('confirmation and tuning evidence rejected',()=>{
   let b=bundle();b.core.scope.partition='confirmation';assert.throws(()=>normalizePacket(b));
@@ -168,7 +184,8 @@ test('audit must read candidate sources, not only its own narrower claim citatio
   const submit=localTools(Type,{packet,archive,role:'audit',readEvidenceIds:new Set(['E.population']),
     readSources,candidate,setReport:p=>{submitted=p;}}).find(x=>x.name==='submit_report');
   await assert.rejects(submit.execute('1',r),/candidate source/);assert.equal(submitted,undefined);
-  readSources.add(source.id);await submit.execute('2',r);assert.equal(submitted,r);
+  readSources.add(source.id);const result=await submit.execute('2',r);assert.equal(submitted,r);
+  assert.equal(result.terminate,true);
 });
 test('dry run requires no Pi, network or credential and cannot overwrite',async t=>{
   const root=await temporary(t),path=join(root,'packet.json'),out=join(root,'run');await save(path,bundle());

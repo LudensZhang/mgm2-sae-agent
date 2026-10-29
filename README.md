@@ -33,6 +33,11 @@ Agents retrieve exact, paginated records using IDs and JSON Pointers. Report
 validation checks structure and citation existence, not scientific correctness.
 Events, communities and studies retain their original denominators.
 
+The [efficiency revision](docs/EFFICIENCY.md) adds lossless grouped evidence reads
+and native terminal report submission, without removing any role or skill.
+Use `evidence_brief` for the complete exported summary and `evidence_read_many`
+for selected records; follow `remaining_ids` when a bundle is size-limited.
+
 ## Setup
 
 Requires Node.js **22.19+** and Pi **1.4.0**. Either reuse an existing Pi install:
@@ -170,6 +175,7 @@ tests and documentation only. See [design references](docs/REFERENCES.md).
 
 ```sh
 node tests/core.test.mjs
+node tests/terminal_sdk.test.mjs
 ```
 
 Tests are synthetic and offline. Live trials must be reviewed for evidence
