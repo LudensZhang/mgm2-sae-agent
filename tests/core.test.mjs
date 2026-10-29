@@ -11,7 +11,7 @@ import {run,localTools} from '../src/runner.mjs';
 import {profileFor,verifyWire,scopedOAuthStore} from '../src/profiles.mjs';
 import {canonicalUsage,sumCanonical} from '../src/accounting.mjs';
 import {skillText} from '../src/runtime.mjs';
-import {packRecords,unpackRecords,readMany,selectBrief} from '../src/evidence_views.mjs';
+import {packRecords,unpackRecords,readMany,selectBrief,categoryAnnotation} from '../src/evidence_views.mjs';
 import {fileURLToPath} from 'node:url';
 
 const bundle=()=>({core:{feature_id:7,site:'otu_l4',k:16,
@@ -50,6 +50,15 @@ test('bulk reads never silently truncate records or count omitted IDs as read',(
   assert.deepEqual(unpackRecords(view),{'E.a':packet.records['E.a']});
   assert.throws(()=>readMany(packet,['missing']));assert.throws(()=>readMany(packet,['E.a','E.a']));
   assert.ok(!('E.case.test' in selectBrief(packet)));
+});
+test('abundance labels follow category values, never ID suffixes or row order',()=>{
+  const p={codebook:{abundance_bins:{0:'Low',1:'Lower-intermediate',2:'Intermediate',3:'Upper-intermediate',4:'High'}},
+    records:{'E.abundance_bins.3':{value:{category:1,background_share:0.15,active_share:0.25},interpretation:'Distinct denominators'}}};
+  const a=categoryAnnotation(p,'E.abundance_bins.3');assert.equal(a.label,'Lower-intermediate');
+  assert.equal(readEvidence(p,{id:'E.abundance_bins.3'}).category_annotation.label,a.label);
+  const view=readMany(p,['E.abundance_bins.3']);assert.equal(view.category_annotations['E.abundance_bins.3'].label,a.label);
+  assert.deepEqual(unpackRecords(view),p.records);
+  assert.equal(categoryAnnotation({...p,codebook:{}},'E.abundance_bins.3'),undefined);
 });
 test('confirmation and tuning evidence rejected',()=>{
   let b=bundle();b.core.scope.partition='confirmation';assert.throws(()=>normalizePacket(b));

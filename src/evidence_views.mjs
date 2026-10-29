@@ -28,15 +28,28 @@ export function selectBrief(packet){
   return Object.fromEntries(Object.entries(packet.records).filter(([id])=>id.startsWith('E.')&&!id.startsWith('E.case.')));
 }
 
+export function categoryAnnotation(packet,id){
+  if(!id.startsWith('E.abundance_bins.'))return undefined;
+  const category=packet.records[id]?.value?.category;
+  const mapping=packet.codebook?.abundance_bins;
+  if(!mapping||!Object.hasOwn(mapping,String(category)))return undefined;
+  return {category,label:mapping[String(category)],
+    source:'packet.codebook.abundance_bins[value.category]',
+    note:'Evidence ID suffix is a record ordinal, NOT the category/bin. Raw record unchanged.'};
+}
+
 export function readMany(packet,ids,{maxChars=18000}={}){
   if(!Array.isArray(ids)||!ids.length||ids.length>64||new Set(ids).size!==ids.length)
     throw new Error('Request 1–64 unique evidence IDs');
-  const selected={};let packed=packRecords(selected),i=0;
+  const view=records=>({...packRecords(records),category_annotations:Object.fromEntries(Object.keys(records).flatMap(id=>{
+    const annotation=categoryAnnotation(packet,id);return annotation?[[id,annotation]]:[];
+  }))});
+  const selected={};let packed=view(selected),i=0;
   for(const id of ids){
     if(!Object.hasOwn(packet.records,id))throw new Error('Unknown evidence id: '+id);
   }
   for(const id of ids){
-    const next=packRecords({...selected,[id]:packet.records[id]});
+    const next=view({...selected,[id]:packet.records[id]});
     if(JSON.stringify(next).length>maxChars)break;
     selected[id]=packet.records[id];packed=next;i++;
   }

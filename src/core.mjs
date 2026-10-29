@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {readFile, mkdir, writeFile, appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {categoryAnnotation} from './evidence_views.mjs';
 
 export const VERSION = '0.1.0';
 export const ROLES = ['observe', 'literature', 'critic', 'synthesis', 'audit'];
@@ -66,6 +67,7 @@ export function readEvidence(packet, {id, pointer='', offset=0, limit=7000}) {
   }
   const text = JSON.stringify(value);
   return {id, pointer, offset, total_chars:text.length, next_offset:offset+limit<text.length?offset+limit:null,
+    ...(categoryAnnotation(packet,id)?{category_annotation:categoryAnnotation(packet,id)}:{}),
     text:text.slice(offset,offset+limit), interpretation:'Exact JSON slice; do not infer omitted fields. Use pointer or pagination for more.'};
 }
 

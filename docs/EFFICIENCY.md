@@ -39,7 +39,8 @@ original evidence IDs. Nested records remain unchanged. No rounding, enrichment
 calculation, data imputation, taxonomy merging, inferred label or LLM summary is
 performed. `unpackRecords(packRecords(records))` must equal the original object.
 
-The bundle is capped at 18,000 serialized characters and 64 IDs. Records are
+The evidence body (including category annotations, excluding pagination metadata)
+is capped at 18,000 serialized characters and 64 IDs. Records are
 never clipped to fit. `remaining_ids` explicitly lists data not returned and
 not counted as read; the agent can request another batch or use existing JSON
 Pointer/pagination. Full evidence is still available through `evidence_read`.
@@ -48,6 +49,13 @@ This is a transport-size bound, not a token or spending cap.
 The observer starts with this summary. Other roles read the records relevant to
 their independent checks. Merely receiving a record does not establish that a
 model understood it; scientific fidelity still requires review.
+
+The first live pilot exposed a semantic hazard already present in the raw packet:
+an evidence ID suffix is a sorted record ordinal, not a category value. The next
+revision attaches the abundance label resolved directly from
+`codebook.abundance_bins[record.value.category]` to both single and bulk reads.
+It never infers a label from an ID suffix or chooses a desired feature class.
+The original records and IDs remain unchanged, and missing mappings stay missing.
 
 ### Terminal submission
 
