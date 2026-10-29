@@ -16,6 +16,18 @@ critique; the auditor independently reads evidence and cached sources. There is
 no prescribed feature class or expected interpretation. The final interpretation
 and audit remain separate: `revise` is not silently promoted to accepted.
 
+These are five actual independent model sessions, not five labels inside one
+chat. The orchestration is a fixed sequential chain, not autonomous delegation
+or a debate scheduler. Whether every role improves quality needs ablation;
+completion alone does not prove the necessity of five agents.
+
+Only two project-local skills are loaded, in full: `sae-interpretation` and
+`source-grounding`. Version 0.2.0 substantively adapts K-Dense's critical-thinking
+and literature-review methods to OTU/community evidence. It preserves research
+question formation, source appraisal, bias assessment, competing explanations,
+and independent verification. No collection-wide installation or modification of
+personal skills is performed. See [adaptation provenance](docs/REFERENCES.md).
+
 The prompt contains an overview and evidence index, **not the complete bundle**.
 Agents retrieve exact, paginated records using IDs and JSON Pointers. Report
 validation checks structure and citation existence, not scientific correctness.
@@ -51,8 +63,16 @@ exposed to the interpreting model.
 Credentials: set `DEEPSEEK_API_KEY` in your environment, or let the runner read
 only the `deepseek` API-key entry from `~/.pi/agent/auth.json`. A different private
 credential-file location can be supplied with `--auth-path`. Do not put a key in
-a command argument, packet, committed file or issue. Shell-command credentials,
-OAuth, gateway routing and Bailian fallback are intentionally unsupported here.
+a command argument, packet, committed file or issue. DeepSeek has no OAuth,
+gateway or Bailian fallback. Shell-command credentials are not supported.
+
+For an explicitly requested Sol comparison, `--model gpt-6-sol` uses the existing
+Pi `openai` OAuth credential with the `chatgpt.tokens.use.direct` scope. The Pi
+SDK locks and persists normal refresh-token rotation in the original auth file;
+other provider entries are preserved. Inference uses `api.openai.com/v1` through
+`SAE_OPENAI_PROXY` (default `http://127.0.0.1:17897`). It does not use the legacy
+Codex endpoint or an API-key fallback. This route **consumes ChatGPT subscription
+usage**; running through Pi does not make Sol quota-free.
 
 ## Run
 
@@ -76,12 +96,23 @@ it does **not** simulate successful literature validation.
 Development is pinned to official `deepseek / deepseek-flash`, `max`, at
 `https://api.deepseek.com`. DeepSeek documents this alias as
 **DeepSeek-V4.1-Flash-1017**; an alias is not an immutable backend snapshot. The
-runner verifies model/provider and the serialized reasoning-effort setting. No
-Codex model or Bailian model is invoked by the runner.
+runner verifies model/provider and the serialized reasoning-effort setting.
+The optional exact `gpt-6-sol` profile uses **high**, not max or a 6.1 substitute:
+
+```sh
+node src/cli.mjs --model gpt-6-sol --packet /private/anonymized/bundle.json \
+  --out runs/feature-sol-high-01 --live --web
+```
+
+Neither profile invokes the Codex CLI or any Bailian model. Old Codex logs can
+be compared retrospectively but are not a controlled harness-only experiment.
 
 Bounds per feature: 40 provider requests, 10 per role, 6 searches, 6 source
 fetches, 12 cached-content slices, 15 minutes total and 5 minutes per role;
-16,384 output tokens per provider request (including reasoning). Requests and wall time are bounded,
+16,384 output tokens per DeepSeek request (including reasoning). For OpenAI
+ChatGPT OAuth the pinned SDK omits that unsupported wire parameter: there is
+**no enforced per-request output-token cap**. Both requested and actual wire
+behavior are recorded in the manifest. Requests and wall time are bounded,
 but this is **not a fixed dollar spending cap**. Automatic provider retries are
 disabled. The CLI exits nonzero on failure and preserves partial results.
 
@@ -102,6 +133,10 @@ model. PDF extraction uses `unpdf`. Public search queries and selected excerpts
 leave the machine. The archive stores the plugin's **exact returned text**, URL,
 timestamp and hash; it does not claim to contain an entire paper or PDF. Failed
 fetches and search snippets must not be promoted to full-text evidence.
+Model-facing source slices mark redacted accession-like strings and path-like
+navigation (including publisher `/home/` links) so the outbound privacy gate
+remains strict. Original text is preserved locally; pagination offsets and
+source hashes refer to that original, not the redacted display.
 
 Other roles read the archive locally. The auditor must read source IDs cited by
 the candidate, including disputed claims. Reading an excerpt is a necessary
@@ -134,6 +169,7 @@ node tests/core.test.mjs
 Tests are synthetic and offline. Live trials must be reviewed for evidence
 coverage, denomination errors, unsupported mechanisms and source usefulness.
 Next: review a small varied feature panel, freeze the final SAE/evidence set,
-then add explicit model adapters and the independently blinded judge. Other
-providers, batch recovery and formal benchmark scoring are not implemented in
-this first version. Do not extrapolate quality or speed from one feature.
+then add the independently blinded judge. Providers beyond the two exact profiles,
+batch recovery and formal benchmark scoring are not implemented. Do not
+extrapolate quality or speed from one feature, and do not convert API token sums
+to a claimed percentage of Pro weekly quota.

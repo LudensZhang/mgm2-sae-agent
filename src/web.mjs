@@ -46,8 +46,24 @@ export function publicUrl(value) {
   return url.href;
 }
 
+// Preserve exact source snapshots on disk; only redact the model-facing slice.
+// Publisher navigation such as /home/journal is indistinguishable from local
+// paths to the strict outbound gate. Public accessions are unnecessary here too.
+// Offsets and hashes continue to refer to the immutable original source text.
+export function sourceForModel(record) {
+  if(typeof record?.text!=='string')return record;
+  let count=0;
+  const text=record.text.replace(/\b(?:PRJ[END][AB]\d+|[SED]R[RSXP]\d+|SAM[END][AG]?\d+)\b/gi,()=>{
+    count++;return '[ACCESSION_REDACTED]';
+  }).replace(/\/(?:home|data\d+|Users)\/[^\s"'<>\\]*/g,()=>{
+    count++;return '[PATH_REDACTED]';
+  });
+  return {...record,text,model_text_redactions:count,
+    text_provenance:'Model-facing slice; path/accession redactions marked. Original text, offsets and hash retained in host archive.'};
+}
+
 export function webTools(Type, {bridge,archive,budget,role,readSources}) {
-  const output=r=>({content:[{type:'text',text:JSON.stringify(r)}],details:{}});
+  const output=r=>({content:[{type:'text',text:JSON.stringify(sourceForModel(r))}],details:{}});
   const tools=[
     {name:'source_list',label:'Source archive',description:'List exact cached retrieval snapshots and their coverage.',
       parameters:Type.Object({}),execute:async()=>output(archive.list())},
