@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {existsSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {json} from './core.mjs';
+import {scopedOAuthStore} from './profiles.mjs';
 
 function packageRoot(name,from=import.meta.url) {
   // Pi exports are ESM-only; require.resolve(name) cannot resolve its import condition.
@@ -52,6 +53,28 @@ export async function deepseekRuntime(pi, {authPath, modelId='deepseek-flash'}) 
   if(!model||model.provider!=='deepseek'||new URL(model.baseUrl).hostname!=='api.deepseek.com')
     throw new Error('Exact official DeepSeek model unavailable; no model substitution');
   return {runtime,model,redact:s=>String(s).split(key).join('[REDACTED]')};
+}
+
+export async function selectedRuntime(pi,{authPath,profile}) {
+  if(profile.provider==='deepseek')return deepseekRuntime(pi,{authPath});
+  const require=createRequire(join(pi.path,'package.json'));
+  const {ProxyAgent,setGlobalDispatcher}=await import(pathToFileURL(require.resolve('undici')));
+  const proxy=process.env.SAE_OPENAI_PROXY??'http://127.0.0.1:17897';
+  const url=new URL(proxy);
+  if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Invalid OpenAI proxy');
+  setGlobalDispatcher(new ProxyAgent(proxy));
+  const secrets=new Set();
+  const remember=c=>{for(const k of ['access','refresh','id_token'])if(typeof c[k]==='string'&&c[k])secrets.add(c[k]);};
+  // AuthStorage is not re-exported by the pinned SDK entry point.
+  const {AuthStorage}=await import(pathToFileURL(join(pi.path,'dist/core/auth-storage.js')));
+  const storage=AuthStorage.create(authPath??join(homedir(),'.pi/agent/auth.json'));
+  const credentials=scopedOAuthStore(storage,remember);
+  if(!await credentials.read('openai'))throw new Error('No Pi OpenAI OAuth credential; sign in through Pi first');
+  const runtime=await pi.sdk.ModelRuntime.create({credentials,modelsPath:null,
+    modelsStore:new pi.ai.InMemoryModelsStore(),allowModelNetwork:false});
+  const model=runtime.getModel(profile.provider,profile.model);
+  if(!model||model.baseUrl!==profile.baseUrl||!runtime.isUsingOAuth('openai'))throw new Error('Exact OpenAI OAuth model unavailable; no substitution');
+  return {runtime,model,redact:s=>{let text=String(s);for(const key of secrets)text=text.split(key).join('[REDACTED]');return text;}};
 }
 
 export async function skillText(root) {

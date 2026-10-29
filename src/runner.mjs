@@ -3,7 +3,8 @@ import {join, dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Budget, Archive, ROLES, VERSION, json, save, log, hash, normalizePacket, overview,
   readEvidence, validateReport, checkPrivacy, summarizeUsage,privateIdentifiers} from './core.mjs';
-import {loadPi,deepseekRuntime,resourceLoader,skillText} from './runtime.mjs';
+import {loadPi,selectedRuntime,resourceLoader,skillText} from './runtime.mjs';
+import {profileFor,verifyWire} from './profiles.mjs';
 import {openWeb,webTools} from './web.mjs';
 import {SYSTEM,TASKS,handoff} from './prompts.mjs';
 
@@ -44,7 +45,7 @@ export function localTools(Type, {packet,archive,role,readEvidenceIds,readSource
 }
 
 async function runRole(pi, env, role) {
-  const {packet,archive,budget,bridge,reports,out,skills,model,runtime,redact,forbidden}=env;
+  const {packet,archive,budget,bridge,reports,out,skills,model,runtime,redact,forbidden,profile}=env;
   const folder=join(out,role);await mkdir(folder);
   let report; const readEvidenceIds=new Set(),readSources=new Set(),messages=[];
   const setReport=p=>{if(report)throw new Error('Report already submitted');report=p;};
@@ -61,11 +62,11 @@ async function runRole(pi, env, role) {
   // Pi appends cwd to the system prompt. No filesystem tools are exposed, so use
   // a virtual public label; keep the real session/output directories host-side.
   const {session}=await pi.sdk.createAgentSession({cwd:'/sae-workspace',agentDir:join(out,'runtime'),modelRuntime:runtime,
-    model,thinkingLevel:'max',tools:tools.map(x=>x.name),customTools:tools,
+    model,thinkingLevel:profile.thinking,tools:tools.map(x=>x.name),customTools:tools,
     resourceLoader:resourceLoader(pi,SYSTEM+'\n\n'+skills),sessionManager:pi.sdk.SessionManager.inMemory(folder),
     settingsManager:pi.sdk.SettingsManager.inMemory({compaction:{enabled:false},retry:{enabled:false},
       provider:{maxRetries:0},cacheWarming:'off',telemetry:false})});
-  if(session.thinkingLevel!=='max'){session.dispose();throw new Error('Pi silently changed thinking level');}
+  if(session.thinkingLevel!==profile.thinking){session.dispose();throw new Error('Pi silently changed thinking level');}
   await save(join(folder,'invocation.json'),{role,provider:model.provider,model:model.id,thinking:session.thinkingLevel,
     tools:session.getActiveToolNames(),prompt_sha256:hash(prompt),system_sha256:hash(session.systemPrompt)});
   await save(join(folder,'prompt.json'),{system:session.systemPrompt,prompt});
@@ -80,14 +81,14 @@ async function runRole(pi, env, role) {
   const stream=session.agent.streamFunction;
   session.agent.streamFunction=async(m,context,options)=>{
     budget.take('requests',role);
-    if(m.id!==model.id||m.provider!=='deepseek'||new URL(m.baseUrl).hostname!=='api.deepseek.com')throw new Error('Model/provider drift refused');
+    if(m.id!==profile.model||m.provider!==profile.provider||m.baseUrl!==profile.baseUrl)throw new Error('Model/provider drift refused');
     checkPrivacy(context,forbidden);
     return stream(m,context,{...options,maxTokens:16384,maxRetries:0,timeoutMs:120000,
       onPayload:async payload=>{
-        if(payload.model!==model.id||payload.reasoning_effort!=='max')throw new Error('Wire model/thinking mismatch');
+        const verified=verifyWire(payload,profile);
         checkPrivacy(payload,forbidden);
-        eventLog({type:'wire_request',model:payload.model,thinking:payload.reasoning_effort,
-          max_tokens:payload.max_tokens,payload_sha256:hash(payload),payload_chars:JSON.stringify(payload).length});
+        eventLog({type:'wire_request',...verified,
+          payload_sha256:hash(payload),payload_chars:JSON.stringify(payload).length});
         return payload;
       }});
   };
@@ -110,7 +111,8 @@ async function runRole(pi, env, role) {
   }
 }
 
-export async function run({packetPath,out,live=false,web=false,authPath}) {
+export async function run({packetPath,out,live=false,web=false,authPath,modelName='deepseek-flash'}) {
+  const profile=profileFor(modelName);
   out=resolve(out);
   const input=await json(resolve(packetPath)),packet=normalizePacket(input);
   let forbidden=[];
@@ -122,27 +124,28 @@ export async function run({packetPath,out,live=false,web=false,authPath}) {
   const skills=await skillText(ROOT);
   await save(join(out,'packet.json'),packet);
   await save(join(out,'overview.json'),overview(packet));
-  const files=['package.json','src/cli.mjs','src/core.mjs','src/runtime.mjs','src/web.mjs','src/runner.mjs','src/prompts.mjs',
+  const files=['package.json','src/cli.mjs','src/core.mjs','src/runtime.mjs','src/web.mjs','src/runner.mjs','src/prompts.mjs','src/profiles.mjs',
     'skills/sae-interpretation/SKILL.md','skills/source-grounding/SKILL.md'];
   const code_hashes=Object.fromEntries(await Promise.all(files.map(async f=>[f,hash(await readFile(join(ROOT,f),'utf8'))])));
   const budget=new Budget();
   await save(join(out,'manifest.json'),{version:VERSION,started_at:new Date().toISOString(),
     source_packet_sha256:packet.source_packet_hash,feature_id:packet.feature_id,site:packet.site,
-    requested_provider:'deepseek',requested_model:'deepseek-flash',requested_thinking:'max',
-    documented_service:'DeepSeek-V4.1-Flash-1017; alias routing is documentation, not an immutable model snapshot',
-    routing_source:'https://api-docs.deepseek.com/quick_start/pricing',
-    roles:ROLES,budget:budget.limits,max_output_tokens_per_request:16384,web,
+    requested_provider:profile.provider,requested_model:profile.model,requested_thinking:profile.thinking,
+    documented_service:profile.service,billing_mode:profile.billing,routing_source:profile.source,
+    roles:ROLES,budget:budget.limits,requested_max_output_tokens:16384,
+    max_output_tokens_per_request:profile.wireOutputCap,web,
     status:live?'live_debug_not_formal_benchmark':'dry_run',code_hashes});
   if(!live)return {status:'dry_run',out,feature_id:packet.feature_id,records:Object.keys(packet.records).length};
   // Pi imports configuration at module load. Set the isolated directory first.
   process.env.PI_CODING_AGENT_DIR=join(out,'runtime');
   for(const k of ['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy'])delete process.env[k];
+  if(profile.provider==='openai')delete process.env.OPENAI_API_KEY;
   const archive=new Archive(join(out,'sources')),reports={};let bridge;
   let redact=s=>String(s),failure;
   try {
-    const pi=await loadPi();const modelEnv=await deepseekRuntime(pi,{authPath});redact=modelEnv.redact;
+    const pi=await loadPi();const modelEnv=await selectedRuntime(pi,{authPath,profile});redact=modelEnv.redact;
     if(web)bridge=await openWeb(join(out,'runtime','web'));
-    const env={packet,archive,budget,bridge,reports,out,skills,forbidden,...modelEnv};
+    const env={packet,archive,budget,bridge,reports,out,skills,forbidden,profile,...modelEnv};
     for(const role of ROLES){
       console.log(JSON.stringify({role,status:'started'}));
       reports[role]=await runRole(pi,env,role);
@@ -160,7 +163,7 @@ export async function run({packetPath,out,live=false,web=false,authPath}) {
       messages:completions.reduce((s,x)=>s+x.usage.messages,0),
       reasoning_usage_messages:completions.reduce((s,x)=>s+x.usage.reasoning_usage_messages,0)},
     budget_used:budget.used,internal_audit_verdict:reports.audit?.verdict??null,
-    sources:archive.list(),formal_benchmark:false};
+    sources:archive.list(),billing_mode:profile.billing,formal_benchmark:false};
   await save(join(out,'completion.json'),result);
   if(failure)throw new Error(failure);
   return {status:result.status,out,seconds:result.seconds,audit:result.internal_audit_verdict};

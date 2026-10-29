@@ -5,9 +5,13 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {normalizePacket,overview,readEvidence,checkPrivacy,privateIdentifiers,Budget,
   Archive,validateReport,summarizeUsage,save} from '../src/core.mjs';
-import {publicUrl,webTools} from '../src/web.mjs';
+import {publicUrl,webTools,sourceForModel} from '../src/web.mjs';
 import {handoff} from '../src/prompts.mjs';
 import {run,localTools} from '../src/runner.mjs';
+import {profileFor,verifyWire,scopedOAuthStore} from '../src/profiles.mjs';
+import {canonicalUsage,sumCanonical} from '../src/accounting.mjs';
+import {skillText} from '../src/runtime.mjs';
+import {fileURLToPath} from 'node:url';
 
 const bundle=()=>({core:{feature_id:7,site:'otu_l4',k:16,
   scope:{partition:'discovery',tuning_exposed:false},codebook:{abundance_bins:5},
@@ -77,6 +81,15 @@ test('public URL constraints reject local and credential URLs',()=>{
   for(const u of ['http://example.org','https://127.0.0.1','https://localhost','https://a.local',
     'https://user:secret@example.org','https://example.org:8080'])assert.throws(()=>publicUrl(u));
 });
+test('source view redacts navigation paths and accessions without changing the archive',()=>{
+  const raw={text:'Anaerobic growth. href="/home/journal" PRJNA123456 https://example.org/paper',
+    sha256:'original-hash',offset:0,next_offset:7000};
+  const view=sourceForModel(raw);checkPrivacy(view);
+  assert.equal(view.model_text_redactions,2);assert.ok(view.text.includes('Anaerobic growth.'));
+  assert.equal(view.sha256,raw.sha256);assert.equal(view.next_offset,7000);
+  assert.ok(raw.text.includes('PRJNA123456'));assert.ok(raw.text.includes('/home/journal'));
+  assert.equal(sourceForModel([]).length,0);
+});
 test('audit receives candidate only, not an expected label or prior critic',()=>{
   assert.deepEqual(handoff('audit',{synthesis:{x:1},critic:{gold:'bad'}}),{synthesis:{x:1}});
 });
@@ -85,10 +98,43 @@ test('usage distinguishes observed API tokens from subscription quota',()=>{
   assert.equal(u.totalTokens,20);assert.equal(u.cost_usd,0.1);assert.equal(u.subscription_quota_percent,null);
   assert.equal(u.reasoning_tokens,2);assert.equal(summarizeUsage([]).reasoning_tokens,null);
 });
+test('Pi and Codex usage normalize to identical non-double-counted totals',()=>{
+  const pi=canonicalUsage({input:10,cacheRead:20,output:8,reasoning_tokens:5,totalTokens:38},'pi');
+  const codex=canonicalUsage({input_tokens:30,cached_input_tokens:20,output_tokens:8,reasoning_output_tokens:5},'codex');
+  assert.deepEqual(pi,codex);assert.equal(sumCanonical([pi,codex]).total_tokens,76);
+  assert.equal(sumCanonical([pi,codex]).reasoning_subset,10);
+  assert.throws(()=>canonicalUsage({input_tokens:1,cached_input_tokens:2},'codex'));
+  assert.throws(()=>canonicalUsage({input:1,totalTokens:4},'pi'));
+  assert.equal(sumCanonical([pi,canonicalUsage({input:1},'pi')]).reasoning_subset,null);
+});
+test('only both selected project skills are loaded, with their full bodies',async()=>{
+  const root=fileURLToPath(new URL('..',import.meta.url));
+  const names=['sae-interpretation','source-grounding'];
+  const expected=(await Promise.all(names.map(n=>readFile(join(root,'skills',n,'SKILL.md'),'utf8')))).join('\n\n');
+  assert.equal(await skillText(root),expected);
+});
 
 // Schema construction is irrelevant to these tool behavior tests. The real SDK
 // schema/serialization is tested by the separate, explicitly authorized live run.
 const Type=new Proxy({}, {get:()=>()=>({})});
+test('exact model profiles and wire reasoning cannot silently drift',()=>{
+  const p=profileFor('gpt-6-sol');assert.equal(p.thinking,'high');assert.equal(p.billing,'chatgpt_subscription_oauth');
+  verifyWire({model:'gpt-6-sol',reasoning:{effort:'high'},store:false,stream:true},p);
+  assert.throws(()=>verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'high'},store:false,stream:true},p));
+  assert.throws(()=>verifyWire({model:'gpt-6-sol',reasoning:{effort:'max'},store:false,stream:true},p));
+  assert.throws(()=>profileFor('gpt6sol'));assert.throws(()=>profileFor('qwen'));
+  verifyWire({model:'deepseek-flash',reasoning_effort:'max',max_tokens:16384},profileFor());
+});
+test('OAuth store limits visibility and rotation to the selected provider',async()=>{
+  let c={type:'oauth',access:'old',refresh:'refresh',scopes:['chatgpt.tokens.use.direct']};
+  let seen=[];const backend={read:async()=>c,list:async()=>[{providerId:'openai'},{providerId:'deepseek'}],
+    modify:async(id,fn)=>{assert.equal(id,'openai');c=await fn(c);return c;}};
+  const s=scopedOAuthStore(backend,x=>seen.push(x.access));
+  assert.equal(await s.read('deepseek'),undefined);assert.equal((await s.list()).length,1);
+  await s.modify('openai',async old=>({...old,access:'new'}));assert.equal(c.access,'new');assert.ok(seen.includes('new'));
+  await assert.rejects(s.modify('deepseek',async x=>x));await assert.rejects(s.delete('openai'));
+  await assert.rejects(s.modify('openai',async()=>({type:'api_key',key:'fake'})));
+});
 test('search cache avoids duplicate calls; other roles cannot search',async t=>{
   const archive=new Archive(await temporary(t)),budget=new Budget();let calls=0;
   const bridge={call:async()=>{calls++;return {content:[{type:'text',text:'result response-abc'}]};}};
