@@ -81,7 +81,7 @@ Codex model or Bailian model is invoked by the runner.
 
 Bounds per feature: 40 provider requests, 10 per role, 6 searches, 6 source
 fetches, 12 cached-content slices, 15 minutes total and 5 minutes per role;
-8,192 output tokens per provider request. Requests and wall time are bounded,
+16,384 output tokens per provider request (including reasoning). Requests and wall time are bounded,
 but this is **not a fixed dollar spending cap**. Automatic provider retries are
 disabled. The CLI exits nonzero on failure and preserves partial results.
 

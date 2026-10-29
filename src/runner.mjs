@@ -26,7 +26,7 @@ export function localTools(Type, {packet,archive,role,readEvidenceIds,readSource
       execute:async(_id,p)=>{const value=readEvidence(packet,p);readEvidenceIds.add(p.id);return txt(value);}},
     {name:'submit_report',label:'Submit role report',description:'Submit a structured report. Validation checks citations and shape, not biological truth. After success, stop.',
       parameters:Type.Object({role:Type.Literal(role),short_name:Type.String({minLength:1,maxLength:180}),
-        statement:Type.String({minLength:20,maxLength:5000}),claims:Type.Array(Claim,{minItems:1,maxItems:6}),
+        statement:Type.String({minLength:20,maxLength:2500}),claims:Type.Array(Claim,{minItems:1,maxItems:6}),
         alternatives:Type.Array(Type.String(),{maxItems:4}),limitations:Type.Array(Type.String(),{maxItems:4}),
         changes:Type.Array(Type.String(),{maxItems:6}),
         ...(role==='audit'?{verdict:Type.Union(['supported','revise','insufficient'].map(x=>Type.Literal(x)))}:{})}),
@@ -82,7 +82,7 @@ async function runRole(pi, env, role) {
     budget.take('requests',role);
     if(m.id!==model.id||m.provider!=='deepseek'||new URL(m.baseUrl).hostname!=='api.deepseek.com')throw new Error('Model/provider drift refused');
     checkPrivacy(context,forbidden);
-    return stream(m,context,{...options,maxTokens:8192,maxRetries:0,timeoutMs:120000,
+    return stream(m,context,{...options,maxTokens:16384,maxRetries:0,timeoutMs:120000,
       onPayload:async payload=>{
         if(payload.model!==model.id||payload.reasoning_effort!=='max')throw new Error('Wire model/thinking mismatch');
         checkPrivacy(payload,forbidden);
@@ -131,7 +131,7 @@ export async function run({packetPath,out,live=false,web=false,authPath}) {
     requested_provider:'deepseek',requested_model:'deepseek-flash',requested_thinking:'max',
     documented_service:'DeepSeek-V4.1-Flash-1017; alias routing is documentation, not an immutable model snapshot',
     routing_source:'https://api-docs.deepseek.com/quick_start/pricing',
-    roles:ROLES,budget:budget.limits,max_output_tokens_per_request:8192,web,
+    roles:ROLES,budget:budget.limits,max_output_tokens_per_request:16384,web,
     status:live?'live_debug_not_formal_benchmark':'dry_run',code_hashes});
   if(!live)return {status:'dry_run',out,feature_id:packet.feature_id,records:Object.keys(packet.records).length};
   // Pi imports configuration at module load. Set the isolated directory first.
