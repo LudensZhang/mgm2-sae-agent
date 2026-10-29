@@ -66,7 +66,7 @@ credential-file location can be supplied with `--auth-path`. Do not put a key in
 a command argument, packet, committed file or issue. DeepSeek has no OAuth,
 gateway or Bailian fallback. Shell-command credentials are not supported.
 
-For an explicitly requested Sol comparison, `--model gpt-6-sol` uses the existing
+For current SAE selection, `--model gpt-6.1-sol` uses the existing
 Pi `openai` OAuth credential with the `chatgpt.tokens.use.direct` scope. The Pi
 SDK locks and persists normal refresh-token rotation in the original auth file;
 other provider entries are preserved. Inference uses `api.openai.com/v1` through
@@ -97,14 +97,20 @@ Development is pinned to official `deepseek / deepseek-flash`, `max`, at
 `https://api.deepseek.com`. DeepSeek documents this alias as
 **DeepSeek-V4.1-Flash-1017**; an alias is not an immutable backend snapshot. The
 runner verifies model/provider and the serialized reasoning-effort setting.
-The optional exact `gpt-6-sol` profile uses **high**, not max or a 6.1 substitute:
+Current SAE selection explicitly uses **`gpt-6.1-sol` / high**:
 
 ```sh
-node src/cli.mjs --model gpt-6-sol --packet /private/anonymized/bundle.json \
-  --out runs/feature-sol-high-01 --live --web
+node src/cli.mjs --model gpt-6.1-sol --packet /private/anonymized/bundle.json \
+  --out runs/feature-sol61-high-01 --live --web
 ```
 
-Neither profile invokes the Codex CLI or any Bailian model. Old Codex logs can
+The separate `gpt-6-sol` / high profile remains available only for explicitly
+requested historical comparisons; neither Sol model substitutes for the other.
+The runtime verifies the exact requested model and the serialized request's
+model ID and reasoning effort before every call. An unavailable model fails
+without fallback. [GPT-6.1 Sol documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+
+None of these profiles invokes the Codex CLI or any Bailian model. Old Codex logs can
 be compared retrospectively but are not a controlled harness-only experiment.
 
 Bounds per feature: 40 provider requests, 10 per role, 6 searches, 6 source

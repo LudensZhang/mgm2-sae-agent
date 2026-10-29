@@ -118,6 +118,12 @@ test('only both selected project skills are loaded, with their full bodies',asyn
 // schema/serialization is tested by the separate, explicitly authorized live run.
 const Type=new Proxy({}, {get:()=>()=>({})});
 test('exact model profiles and wire reasoning cannot silently drift',()=>{
+  const current=profileFor('gpt-6.1-sol');
+  assert.equal(current.thinking,'high');assert.equal(current.provider,'openai');
+  assert.equal(current.model,'gpt-6.1-sol');assert.equal(current.billing,'chatgpt_subscription_oauth');
+  verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'high'},store:false,stream:true},current);
+  assert.throws(()=>verifyWire({model:'gpt-6-sol',reasoning:{effort:'high'},store:false,stream:true},current));
+  assert.throws(()=>verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'max'},store:false,stream:true},current));
   const p=profileFor('gpt-6-sol');assert.equal(p.thinking,'high');assert.equal(p.billing,'chatgpt_subscription_oauth');
   verifyWire({model:'gpt-6-sol',reasoning:{effort:'high'},store:false,stream:true},p);
   assert.throws(()=>verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'high'},store:false,stream:true},p));
