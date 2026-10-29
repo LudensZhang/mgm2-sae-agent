@@ -5,7 +5,10 @@
 This development task pauses further SAE layer-selection interpretation. It does
 not change the SAE, select a layer, lower model reasoning, remove literature
 grounding, or introduce an external judge. Development uses the explicitly
-authorized official DeepSeek Flash/max route, not Bailian or Sol.
+authorized official DeepSeek Flash/max route, not Bailian. After the first pilot,
+the user separately authorized one matched GPT-6.1 Sol/high run through Pi and
+ChatGPT subscription OAuth to distinguish model capability from harness effects.
+This authorization does not resume the layer-selection batch or permit 6 Sol.
 
 All five independent sessions and both complete adapted skills remain. Existing
 records, scientific denominators, discovery-only boundaries, privacy gates,

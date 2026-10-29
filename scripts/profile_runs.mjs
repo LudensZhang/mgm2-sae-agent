@@ -26,10 +26,18 @@ for(const dir of values.run){
       post_submission_usage:acknowledgements,
       tool_errors:ends.filter(e=>e.isError).map(e=>({name:e.toolName,result:e.result}))});
   }
+  let candidate,auditCompletion;
+  try{candidate=await json(join(dir,'interpretation.json'));}catch(e){if(e.code!=='ENOENT')throw e;}
+  try{auditCompletion=await json(join(dir,'audit','completion.json'));}catch(e){if(e.code!=='ENOENT')throw e;}
+  const citedSources=[...new Set((candidate?.claims??[]).flatMap(c=>c.source_ids))];
   runs.push({path:resolve(dir),model:manifest.requested_model,thinking:manifest.requested_thinking,
-    source_packet_sha256:manifest.source_packet_sha256,status:completion.status,
+    source_packet_sha256:manifest.source_packet_sha256,code_hashes:manifest.code_hashes,status:completion.status,
     audit:completion.internal_audit_verdict,seconds:completion.seconds,
-    usage:completion.usage_total,budget:completion.budget_used,roles});
+    usage:completion.usage_total,budget:completion.budget_used,roles,
+    sources:{total:completion.sources?.length??0,failed:completion.sources?.filter(s=>s.is_error).length??0},
+    candidate_report_chars:candidate?JSON.stringify(candidate).length:null,
+    candidate_cited_sources:citedSources,
+    candidate_sources_not_read_by_auditor:citedSources.filter(id=>!auditCompletion?.read_sources.includes(id))});
 }
 const result={runs,notes:['Input excludes cacheRead; reasoning is a subset of output.',
   'Character lengths are not exact token attribution. Tool results contribute to later requests.',
