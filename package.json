@@ -1,0 +1,11 @@
+{
+  "name": "mgm2-sae-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight, evidence-first microbial SAE interpretation on Pi",
+  "engines": {"node": ">=22.19.0"},
+  "scripts": {"test": "node tests/core.test.mjs", "start": "node src/cli.mjs"},
+  "dependencies": {"@earendil-works/pi-coding-agent": "1.4.0"},
+  "repository": {"type": "git", "url": "git+ssh://git@github.com/LudensZhang/mgm2-sae-agent.git"}
+}

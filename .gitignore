@@ -1,0 +1,16 @@
+node_modules/
+.runtime/
+runs/
+cache/
+data/
+*.local.json
+.env
+.env.*
+auth.json
+private_identifiers.json
+bundle.json
+*.pem
+*.key
+models-store.json
+*.log
+__pycache__/
