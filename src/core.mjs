@@ -3,7 +3,7 @@ import {readFile, mkdir, writeFile, appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {categoryAnnotation} from './evidence_views.mjs';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 export const ROLES = ['observe', 'literature', 'critic', 'synthesis', 'audit'];
 export const hash = x => createHash('sha256').update(typeof x === 'string' ? x : JSON.stringify(x)).digest('hex');
 export const json = async path => JSON.parse(await readFile(path, 'utf8'));
@@ -15,11 +15,10 @@ export const log = (path, value) => appendFile(path, JSON.stringify(value) + '\n
 // Not an anonymizer: inputs must already be exported/anonymized by the data owner.
 export function checkPrivacy(value, forbidden = []) {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
-  if (/\b(?:PRJ[END][AB]\d+|[SED]R[RSXP]\d+|SAM[END][AG]?\d+)\b/i.test(text)
-      || /\/(?:home|data\d+|Users)\//.test(text)
+  if (/\/(?:home|data\d+|Users)\//.test(text)
       || /"(?:api_key|access_token|refresh_token|private_identifiers)"\s*:/i.test(text)
       || forbidden.some(s => s.length >= 6 && text.includes(s))) {
-    throw new Error('Privacy gate: export contains a raw identifier, local path, or credential field');
+    throw new Error('Privacy gate: export contains a restricted identifier, local path, or credential field');
   }
 }
 
@@ -31,9 +30,29 @@ export function normalizePacket(input) {
   const records = {...core.facts};
   for (const [key, value] of Object.entries(input.annex?.cases ?? {})) records[`X.case.${key}`] = value;
   for (const [key, value] of Object.entries(input.annex?.controls ?? {})) records[`X.control.${key}`] = value;
+  if(core.annex_available?.case_groups)records['X.case_groups']={value:core.annex_available.case_groups,
+    interpretation:'Selection provenance: top examples, varied positives and random zeros are different illustration sets, not population estimates.'};
+  // These are exported deterministic discovery statistics, not historical agent reports.
+  // Split by analysis section so the reader need not ingest a giant diagnostics blob.
+  const capabilities={
+    study_rates:'Study denominators, concentration sensitivity and study-cluster uncertainty',
+    continuous_abundance:'Continuous abundance, activation magnitude and within-environment bin rates',
+    within_otu:'Within-OTU and within-OTU/study comparisons, with eligibility and display coverage',
+    matched_contrasts:'Pair differences, same-bin/study indicators and control reuse',
+  };
+  if(input.diagnostics?.analyses){
+    if(input.diagnostics.partition!=='discovery')throw new Error('Diagnostics must explicitly be discovery-only');
+    for(const [name,description] of Object.entries(capabilities)){
+      const value=input.diagnostics.analyses[name];if(value===undefined)continue;
+      for(const [section,part] of Object.entries(value))records[`A.${name}.${section}`]={value:part,interpretation:description};
+    }
+  }
   // Exclude previous labels, previous LLM reports, source claims, and selection strata.
   // Existing deterministic analysis is available only when explicitly exported as such.
-  for (const [key, value] of Object.entries(input.analysis_results ?? {})) records[key] = value;
+  for (const [key, value] of Object.entries(input.analysis_results ?? {})) {
+    if(Object.hasOwn(records,key))throw new Error('Duplicate evidence id: '+key);
+    records[key] = value;
+  }
   const packet = {feature_id:core.feature_id, site:core.site, k:core.k, codebook:core.codebook,
     scope:core.scope, records, unavailable:core.unavailable ?? [],
     source_packet_hash:hash(input)};
@@ -50,6 +69,7 @@ export function overview(packet) {
   return {feature_id:packet.feature_id, site:packet.site, k:packet.k, codebook:packet.codebook,
     scope:packet.scope, population:packet.records['E.population'], groups,
     evidence_index:Object.keys(packet.records).filter(id=>!id.startsWith('X.case.')),
+    analysis_index:Object.keys(packet.records).filter(id=>id.startsWith('A.')),
     unavailable:packet.unavailable, note:'Use evidence_list/evidence_read for details. Source packet is not a population census unless explicitly stated.'};
 }
 
@@ -76,11 +96,16 @@ function checkPage(offset,limit) {
     throw new Error('Invalid page bounds');
 }
 
-export function privateIdentifiers(mapping) {
+export function privateIdentifiers(mapping, publicStudyIds=[]) {
   // The export contains arrays of raw IDs, not a list of field names.
   if(!mapping || Object.values(mapping).some(v=>!Array.isArray(v)||v.some(x=>typeof x!=='string')))
     throw new Error('Unsupported private identifier manifest');
-  return Object.values(mapping).flat().filter(x=>!/^(?:SAMPLE_|STUDY_|EVENT_)/.test(x));
+  if(!Array.isArray(publicStudyIds)||publicStudyIds.some(x=>typeof x!=='string'||
+      !/^(?:PRJ[END][AB]\d+|[SED]RP\d+)$/.test(x)||!mapping.studies?.includes(x)))
+    throw new Error('Public study IDs must be source study accessions');
+  const allowed=new Set(publicStudyIds);
+  return Object.entries(mapping).flatMap(([kind,values])=>values.filter(x=>
+    !/^(?:SAMPLE_|STUDY_|EVENT_)/.test(x)&&!(kind==='studies'&&allowed.has(x))));
 }
 
 export class Budget {

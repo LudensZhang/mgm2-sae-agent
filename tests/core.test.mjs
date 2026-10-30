@@ -64,12 +64,43 @@ test('confirmation and tuning evidence rejected',()=>{
   let b=bundle();b.core.scope.partition='confirmation';assert.throws(()=>normalizePacket(b));
   b=bundle();b.core.scope.tuning_exposed=true;assert.throws(()=>normalizePacket(b));
 });
-test('privacy guard checks raw IDs and credentials, not generic manifest keys',()=>{
+test('all four discovery analysis families and case selection reach the reader losslessly',()=>{
+  const b=bundle();b.core.annex_available={case_groups:{top_examples:['EVENT_1'],random_zero_examples:['EVENT_2']}};
+  b.diagnostics={partition:'discovery',analyses:{
+    study_rates:{top_studies:[{study:'PRJNA123456',events:80,active:3}],leave_top_five_out:{remaining_active:9}},
+    continuous_abundance:{groups:{active:{activation:{median:0.001}}}},
+    within_otu:{same_otu_and_study:{eligible_groups:2,profiles:[{active:0,events:8}]}},
+    matched_contrasts:{joint:{pairs:[{same_bin:false,same_study:true}]}},
+    previous_model_opinion:{label:'DO NOT SEND'}}};
+  const p=normalizePacket(b);
+  for(const family of ['study_rates','continuous_abundance','within_otu','matched_contrasts']){
+    for(const [section,value] of Object.entries(b.diagnostics.analyses[family])){
+      const id=`A.${family}.${section}`;
+      assert.deepEqual(JSON.parse(readEvidence(p,{id}).text).value,value);
+      assert.ok(overview(p).analysis_index.includes(id));
+    }
+  }
+  assert.deepEqual(p.records['X.case_groups'].value,b.core.annex_available.case_groups);
+  assert.ok(!JSON.stringify(p).includes('DO NOT SEND'));
+  b.diagnostics.partition='tuning';assert.throws(()=>normalizePacket(b),/discovery/);
+});
+test('analysis IDs cannot silently overwrite population evidence',()=>{
+  const b=bundle();b.analysis_results={'E.population':{value:{events:0}}};
+  assert.throws(()=>normalizePacket(b),/Duplicate evidence/);
+});
+test('privacy guard permits public accessions but blocks restricted IDs and credentials',()=>{
   const ids=privateIdentifiers({samples:['private-sample-abcdef'],studies:['private-study-abcdef']});
   checkPrivacy('100 samples in 5 studies',ids);
-  for(const value of ['PRJNA123456','SRR123456','/home/alice/key','private-sample-abcdef','{"api_key":"secret"}'])
+  checkPrivacy('Public study PRJNA123456 and run SRR123456',ids);
+  for(const value of ['/home/alice/key','private-sample-abcdef','{"api_key":"secret"}'])
     assert.throws(()=>checkPrivacy(value,ids));
   assert.throws(()=>privateIdentifiers({samples:'bad'}));
+  const mapping={samples:['private-sample-abcdef'],studies:['PRJNA123456','restricted-study']};
+  assert.throws(()=>checkPrivacy('PRJNA123456',privateIdentifiers(mapping)));
+  checkPrivacy('PRJNA123456',privateIdentifiers(mapping,['PRJNA123456']));
+  assert.throws(()=>checkPrivacy('restricted-study',privateIdentifiers(mapping,['PRJNA123456'])));
+  assert.throws(()=>privateIdentifiers(mapping,['private-sample-abcdef']));
+  assert.throws(()=>privateIdentifiers(mapping,['PRJNA999999']));
 });
 test('JSON pointer, exact pagination, unknown and prototype paths',()=>{
   const p=normalizePacket(bundle());
@@ -106,11 +137,12 @@ test('public URL constraints reject local and credential URLs',()=>{
   for(const u of ['http://example.org','https://127.0.0.1','https://localhost','https://a.local',
     'https://user:secret@example.org','https://example.org:8080'])assert.throws(()=>publicUrl(u));
 });
-test('source view redacts navigation paths and accessions without changing the archive',()=>{
+test('source view retains public accessions and redacts paths without changing the archive',()=>{
   const raw={text:'Anaerobic growth. href="/home/journal" PRJNA123456 https://example.org/paper',
     sha256:'original-hash',offset:0,next_offset:7000};
   const view=sourceForModel(raw);checkPrivacy(view);
-  assert.equal(view.model_text_redactions,2);assert.ok(view.text.includes('Anaerobic growth.'));
+  assert.equal(view.model_text_redactions,1);assert.ok(view.text.includes('Anaerobic growth.'));
+  assert.ok(view.text.includes('PRJNA123456'));
   assert.equal(view.sha256,raw.sha256);assert.equal(view.next_offset,7000);
   assert.ok(raw.text.includes('PRJNA123456'));assert.ok(raw.text.includes('/home/journal'));
   assert.equal(sourceForModel([]).length,0);

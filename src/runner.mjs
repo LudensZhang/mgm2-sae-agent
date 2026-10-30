@@ -122,12 +122,15 @@ async function runRole(pi, env, role) {
   }
 }
 
-export async function run({packetPath,out,live=false,web=false,authPath,modelName='deepseek-flash'}) {
+export async function run({packetPath,out,live=false,web=false,authPath,modelName='deepseek-flash',workflow='legacy',sourceCachePath}) {
+  if(workflow==='adaptive')return (await import('./adaptive.mjs')).runAdaptive({packetPath,out,live,web,authPath,modelName,sourceCachePath});
+  if(workflow!=='legacy')throw new Error('Unknown workflow: '+workflow);
   const profile=profileFor(modelName);
   out=resolve(out);
   const input=await json(resolve(packetPath)),packet=normalizePacket(input);
   let forbidden=[];
-  try {forbidden=privateIdentifiers(await json(join(dirname(resolve(packetPath)),'private_identifiers.json')));}
+  try {forbidden=privateIdentifiers(await json(join(dirname(resolve(packetPath)),'private_identifiers.json')),
+    input.export_policy?.public_study_accessions??[]);}
   catch(e){if(e.code!=='ENOENT')throw e;}
   checkPrivacy(packet,forbidden);
   // Exclusive directory: failed attempts are never overwritten or silently retried.

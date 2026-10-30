@@ -7,6 +7,29 @@ biological annotation system or a completed model-comparison benchmark.
 
 ## Workflow
 
+The current development workflow is selected explicitly with `--workflow adaptive`:
+
+`interpreter → [researcher when needed → same interpreter] → independent reviewer`
+
+There are three logical roles but ordinarily only two sessions when external
+knowledge is unnecessary. The interpreter retains its Pi session across research
+and review handoffs and owns the final candidate. The researcher answers a concrete
+question, not another full feature report. The reviewer returns compact checks and
+material issues, not a replacement interpretation. A material revision returns to
+the same interpreter and reviewer; no extra final-summary agent is launched.
+The reviewer does not receive the interpreter's deliberation or research answer.
+Local statistical findings do not require literature. Meaningful ecological
+relationships and subgroups may warrant research without a preset coverage cutoff.
+
+The pilot allows two research requests and one material revision within the total
+40-request bound. These are operational limits, not confidence scores. An unresolved
+review is saved as `needs_review`, never silently accepted. Shared source caching
+stores original fetch extracts and their hashes/timestamps, not other feature labels
+or interpretations. Each role must still inspect the evidence it uses.
+
+The historical comparator remains available as `--workflow legacy` (the backward-
+compatible CLI default):
+
 `observe → literature → critic → synthesis → audit`
 
 Each role is a fresh Pi SDK session with a small, explicit handoff. The observer
@@ -16,13 +39,13 @@ critique; the auditor independently reads evidence and cached sources. There is
 no prescribed feature class or expected interpretation. The final interpretation
 and audit remain separate: `revise` is not silently promoted to accepted.
 
-These are five actual independent model sessions, not five labels inside one
+The comparator uses five actual independent model sessions, not five labels inside one
 chat. The orchestration is a fixed sequential chain, not autonomous delegation
 or a debate scheduler. Whether every role improves quality needs ablation;
 completion alone does not prove the necessity of five agents.
 
 Only two project-local skills are loaded, in full: `sae-interpretation` and
-`source-grounding`. Version 0.2.0 substantively adapts K-Dense's critical-thinking
+`source-grounding`. The skills substantively adapt K-Dense's critical-thinking
 and literature-review methods to OTU/community evidence. It preserves research
 question formation, source appraisal, bias assessment, competing explanations,
 and independent verification. No collection-wide installation or modification of
@@ -61,7 +84,7 @@ export SAE_WEB_PACKAGE=/path/to/node_modules/pi-web-access
 The default plugin location is `~/.pi/agent/npm/node_modules/pi-web-access`.
 The original MCP entry point is used; this project does not patch the plugin.
 `pi-subagents` remains installed and untouched, but is **not invoked** by this
-batch harness: the five roles are explicit SDK sessions. No global extensions,
+batch harness: the roles are explicit SDK sessions. No global extensions,
 personal skills, personal model defaults, shell tools or arbitrary file tools are
 exposed to the interpreting model.
 
@@ -109,6 +132,19 @@ node src/cli.mjs --model gpt-6.1-sol --packet /private/anonymized/bundle.json \
   --out runs/feature-sol61-high-01 --live --web
 ```
 
+For the adaptive pilot, after authorizing the specific evidence export:
+
+```sh
+node src/cli.mjs --workflow adaptive --model gpt-6.1-sol \
+  --packet /reviewed/export/bundle.json --out runs/feature-adaptive-01 \
+  --source-cache runs/shared-original-sources --live --web
+```
+
+Omit `--live` for an offline preflight. The optional source cache is a local folder;
+only the research role can search/import its original text. A formal model comparison
+should freeze cache availability and inputs across models, rather than mix cold and
+warm caches without recording the difference.
+
 The separate `gpt-6-sol` / high profile remains available only for explicitly
 requested historical comparisons; neither Sol model substitutes for the other.
 The runtime verifies the exact requested model and the serialized request's
@@ -126,17 +162,29 @@ ChatGPT OAuth the pinned SDK omits that unsupported wire parameter: there is
 behavior are recorded in the manifest. Requests and wall time are bounded,
 but this is **not a fixed dollar spending cap**. Automatic provider retries are
 disabled. The CLI exits nonzero on failure and preserves partial results.
+The adaptive workflow keeps the same total request/search/fetch/time bounds, but
+allows up to 16 provider requests per logical role across its continuing phases;
+each phase has a five-minute ceiling. Role counts are not fixed API-call counts.
 
 ## Evidence and source contract
 
-The input adapter accepts `core.facts` (or `evidence.facts`), anonymized cases,
+The input adapter accepts `core.facts` (or `evidence.facts`), sample-aliased cases,
 matched controls and explicitly exported deterministic `analysis_results`.
+Discovery-only `diagnostics.analyses` exposes four allowlisted families as
+`A.*` records: study rates, continuous abundance, within-OTU comparisons and
+matched contrasts. Case-selection groups remain distinct from population data.
 Prior model interpretations, previous source claims and selection strata are
 not handed to agents. Only discovery evidence is allowed when a partition is
 declared. The adapter is **not an anonymizer or a complete DLP system**: prepare
 and review exports upstream. A sibling `private_identifiers.json` containing
 arrays of raw sample/study IDs is used as an additional local deny-list and is
 never sent to the model.
+Verified public study accessions may be retained through the host-side
+`export_policy.public_study_accessions` allowance. This allowance covers verified
+public studies that may also appear in retrieved literature, not only studies
+displayed in a feature's selected examples. Private sample identifiers remain
+blocked. No raw identifier manifest or host-side allowance list is itself handed
+to the interpreter.
 
 Live retrieval uses a fixed Exa backend through the plugin, without a secondary
 LLM summarizer, browser cookies, remote hosted fetch providers or a paid PDF
@@ -144,14 +192,47 @@ model. PDF extraction uses `unpdf`. Public search queries and selected excerpts
 leave the machine. The archive stores the plugin's **exact returned text**, URL,
 timestamp and hash; it does not claim to contain an entire paper or PDF. Failed
 fetches and search snippets must not be promoted to full-text evidence.
-Model-facing source slices mark redacted accession-like strings and path-like
-navigation (including publisher `/home/` links) so the outbound privacy gate
-remains strict. Original text is preserved locally; pagination offsets and
+Model-facing source slices retain public accessions and mark redacted path-like
+navigation (including publisher `/home/` links). Original text is preserved locally; pagination offsets and
 source hashes refer to that original, not the redacted display.
 
 Other roles read the archive locally. The auditor must read source IDs cited by
 the candidate, including disputed claims. Reading an excerpt is a necessary
 condition, not proof that an agent understood or adequately checked it.
+
+### Evidence repair and retrieval-necessity review
+
+`scripts/repair_packets.py` builds versioned discovery-only packets from hashed
+small caches and a streamed event table. It adds public metadata, strict-control
+coverage, strong-activation tails and sample concentration without loading the
+original large pickle or retraining an SAE. Previous packets/reports are retained.
+`scripts/audit_repair_pilot.mjs` checks transport, arithmetic, recorded model/high
+settings and paired historical usage. `tests/test_repair_packets.py` checks the
+exporter's pure helper behavior. The four-case pilot and separately authorized
+public-study retry scripts are experiment-specific, not full-panel launchers.
+
+`scripts/audit_literature_need.mjs` inventories a completed panel and records
+explicitly reviewed claim-level examples. Counts of citations or biological
+hypotheses are not counts of features needing retrieval. Descriptive statistical
+claims do not require a paper; study metadata lookup, taxonomy resolution and
+mechanistic research are separate needs. The proposed two-session interpretation
+plus independent-review workflow with conditional retrieval is implemented separately
+under `src/adaptive*.mjs`; the earlier repaired-evidence pilot preserves its frozen
+five-session results. `scripts/run_adaptive_pilot.py` dispatches only its four
+explicitly authorized cases, using two workers and no automatic retries.
+
+Offline regression commands:
+
+```sh
+node tests/core.test.mjs
+node tests/adaptive.test.mjs
+node tests/terminal_sdk.test.mjs
+python tests/test_repair_packets.py
+```
+
+The SDK integration tests use synthetic responses and an in-memory fake credential;
+they make no provider requests. The adaptive test verifies continued context after a
+terminal research request, not just a mocked sequence of role names.
 
 ## Outputs and reproducibility
 
