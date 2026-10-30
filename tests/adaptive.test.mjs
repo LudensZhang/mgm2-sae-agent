@@ -5,9 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {adaptiveFlow} from '../src/adaptive_flow.mjs';
 import {adaptiveMessage} from '../src/adaptive_prompts.mjs';
-import {validateReview} from '../src/adaptive_tools.mjs';
+import {validateReview,remainingToolBudget} from '../src/adaptive_tools.mjs';
 import {SourceCache} from '../src/source_cache.mjs';
-import {Archive,hash} from '../src/core.mjs';
+import {Archive,hash,Budget} from '../src/core.mjs';
 
 const candidate={role:'interpret',short_name:'Test',statement:'Local pattern',claims:[{evidence_ids:['E.a'],source_ids:[]}]};
 const action={kind:'candidate',report:candidate};
@@ -15,6 +15,16 @@ const supported={kind:'review',report:{verdict:'supported',checks:[],issues:[]}}
 const request={kind:'research_request',request:{question:'A concrete question',evidence_ids:['E.a']}};
 const answer={kind:'research_result',report:{answer:'Bounded answer',findings:[]}};
 const revise={kind:'review',report:{verdict:'revise',issues:[{problem:'A material error'}]}};
+
+test('remaining tool budgets expose exact limits without granting additional calls',()=>{
+  const budget=new Budget({roleRequests:16});
+  for(let i=0;i<6;i++)budget.take('fetches','research');
+  budget.take('requests','research');budget.take('searches','research');
+  assert.deepEqual(remainingToolBudget(budget,'research'),{role_requests_remaining:15,
+    feature_requests_remaining:39,search_calls_remaining:5,fetch_calls_remaining:0,source_slice_calls_remaining:12});
+  assert.throws(()=>budget.take('fetches','research'),/budget exceeded/);
+  assert.equal(remainingToolBudget(budget,'research').fetch_calls_remaining,0);
+});
 
 test('local-only interpretation uses exactly two roles, no research or final summarizer',async()=>{
   const calls=[];const r=await adaptiveFlow({invoke:async(role)=>{calls.push(role);return role==='interpret'?action:supported;}});

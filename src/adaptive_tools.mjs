@@ -3,6 +3,14 @@ import {checkPrivacy} from './core.mjs';
 import {webTools,sourceForModel} from './web.mjs';
 const txt=value=>({content:[{type:'text',text:JSON.stringify(value)}],details:{}});
 
+export function remainingToolBudget(budget,role){
+  return {role_requests_remaining:Math.max(0,budget.limits.roleRequests-(budget.roles[role]??0)),
+    feature_requests_remaining:Math.max(0,budget.limits.requests-budget.used.requests),
+    search_calls_remaining:Math.max(0,budget.limits.searches-budget.used.searches),
+    fetch_calls_remaining:Math.max(0,budget.limits.fetches-budget.used.fetches),
+    source_slice_calls_remaining:Math.max(0,budget.limits.slices-budget.used.slices)};
+}
+
 export function assertReferences(value,packet,archive){
   if(!Array.isArray(value.evidence_ids)||!value.evidence_ids.length||
     value.evidence_ids.some(id=>!Object.hasOwn(packet.records,id)))throw new Error('Missing/unknown local evidence');

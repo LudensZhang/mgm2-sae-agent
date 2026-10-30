@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {save,log,hash,checkPrivacy,summarizeUsage,overview} from './core.mjs';
 import {resourceLoader} from './runtime.mjs';
 import {verifyWire} from './profiles.mjs';
-import {adaptiveTools} from './adaptive_tools.mjs';
+import {adaptiveTools,remainingToolBudget} from './adaptive_tools.mjs';
 import {ADAPTIVE_SYSTEM,ADAPTIVE_TASKS,adaptiveMessage} from './adaptive_prompts.mjs';
 
 // One real Pi session per logical role. Pausing for research or review does not
@@ -16,9 +16,7 @@ export async function createAdaptiveWorker(pi,env,role){
     candidate:()=>candidateValue,setAction:value=>{if(action)throw new Error('Phase already submitted');action=value;}})
     .map(tool=>({...tool,execute:async(...args)=>{
       const result=await tool.execute(...args);
-      return {...result,content:[...result.content,{type:'text',text:JSON.stringify({
-        role_requests_remaining:budget.limits.roleRequests-(budget.roles[role]??0),
-        feature_requests_remaining:budget.limits.requests-budget.used.requests})}]};
+      return {...result,content:[...result.content,{type:'text',text:JSON.stringify(remainingToolBudget(budget,role))}]};
     }}));
   const folder=join(out,role);await mkdir(folder);
   const {session}=await pi.sdk.createAgentSession({cwd:'/sae-workspace',agentDir:join(out,'runtime'),modelRuntime:runtime,
