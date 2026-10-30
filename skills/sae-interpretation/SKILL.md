@@ -3,7 +3,7 @@ name: sae-interpretation
 description: Explain and critically assess microbial OTU-in-community SAE activation patterns using population evidence, community context, matched comparisons, and biological literature. Use for discovery interpretation and independent review, not clinical diagnosis or causal validation.
 license: MIT
 metadata:
-  version: "0.2.0"
+  version: "0.4.0"
   adapted-from: K-Dense scientific-critical-thinking 1.5
 ---
 
@@ -43,6 +43,13 @@ Read records selectively with `evidence_list` and `evidence_read`; paginate an
 important truncated record instead of inferring its omitted fields. These tools
 retrieve existing results; they do not run statistical analyses.
 
+The `A.*` index exposes precomputed study rates, continuous abundance, within-OTU
+comparisons and matched-pair differences. Read the sections that distinguish your
+explanations, not the entire inventory. `X.case_groups` preserves how examples were
+selected. Public study accessions are identifiers for research context, not secret
+labels or proof of a technical artifact. Metadata coverage and source scope determine
+whether a study-level description can be applied to an individual sample.
+
 ## 2. Build an integrated account before naming the feature
 
 Inspect the available evidence across taxonomy, habitat, focal abundance,
@@ -53,8 +60,11 @@ alternative, rather than forcing one of these axes to win in advance.
 - **Taxonomy:** distinguish the highly enriched core from the fraction of all
   active events it covers. A narrowly enriched genus can explain a minority
   subpattern without describing the entire feature. Respect source namespaces,
-  rank-specific unknowns, and the codebook's category definitions; neither merge
-  unknown taxa nor assume disjoint annotations without evidence.
+  rank-specific unknowns, and the codebook's category definitions. In this exporter
+  each OTU uses one selected taxonomy source, so source-prefixed categories at a
+  single rank count disjoint events. Whether names from different systems denote
+  the same biological lineage is a separate nomenclature question, not independent
+  replication or automatic double-counting.
 - **Environment:** establish both active-event composition and enrichment over
   the sampled background. A common environment can cover most activations with
   modest fold enrichment; its maximum possible enrichment is 1/background share.
@@ -75,6 +85,10 @@ alternative, rather than forcing one of these axes to win in advance.
   unless evidence separates those explanations. Breadth across studies supports
   replication of a pattern, not absence of all batch effects.
 
+Separate whole-population firing from strong-activation tails and activation mass.
+The exported thresholds and denominators define these different views; a striking
+top tail should not silently replace the whole-feature interpretation.
+
 Keep four quantities separate: P(group | active), P(active | group), enrichment
 P(group | active)/P(group), and activation magnitude. Quote the denominator with
 any consequential percentage. Consider coverage and strength together; do not
@@ -94,6 +108,10 @@ from the base rate; it is not automatically strong specificity evidence. For a
 context claim, within-OTU contrasts are more discriminating than unrelated taxa.
 Matching on abundance does not automatically match taxonomy, environment, and
 study. A representative case cannot establish an adjusted population effect.
+The joint control group matches OTU, coarse habitat, technology and nearby raw
+abundance; same-study and same-bin membership are separately reported. Use strict
+and relaxed subsets at their actual coverage. A context-increment comparison tests
+its named added variables, not all possible community information.
 
 Distinguish an analysis that is unavailable from an analysis showing no effect.
 Do not invent adjusted coefficients, uncertainty, significance, or replication.
@@ -103,7 +121,12 @@ descriptive claim; do require stronger evidence for causal or mechanistic names.
 
 ## 4. Integrate biology without transferring unsupported properties
 
-Use the source-grounding skill to examine mechanisms and ecological meaning.
+Use the source-grounding skill when an external knowledge question can materially
+improve an interpretation. Local taxonomy, habitat, abundance and study associations
+do not require publications to be legitimate findings. A coherent ecological
+relationship across taxa, meaningful subgroup, unresolved nomenclature, or missing
+study background may warrant targeted research. Explain which claim the answer
+could change; do not invent a question to justify a fixed literature stage.
 Keep local evidence, external findings, and the inference connecting them
 distinct. Literature can make a pattern biologically intelligible, but cannot
 assign a strain's function to every OTU in a genus or establish an unmeasured
@@ -118,27 +141,45 @@ more biological, or discard a valid association because its mechanism is open.
 
 ## 5. Make the multi-agent collaboration consequential
 
-- **Observer:** build a descriptive whole-feature account and identify a
-  discriminating alternative. Mark untested biological ideas as alternatives.
-- **Literature investigator:** challenge as well as contextualize that account;
-  communicate what the opened sources do and do not explain.
-- **Critic:** independently read the evidence that could change the conclusion.
-  For each material concern give the disputed claim, exact supporting or
-  conflicting evidence, interpretive consequence, and a feasible correction.
-  Prioritize up to three consequential issues. Recognize strengths; do not
-  invent objections merely to fill a quota.
-- **Synthesizer:** resolve those concerns using evidence, recording substantive
-  changes or a reasoned disagreement in `changes`. Do not treat a critic's
-  assertion as a higher authority than the data. Keep supported content when
-  rejecting an overextended mechanism.
-- **Auditor:** assess the candidate independently against local evidence and
-  original cached sources. Judge the coherence, coverage, quantitative fidelity,
-  biological applicability, and justified specificity of the explanation, not
-  whether it matches a predefined feature type. An objection is itself a claim
-  requiring evidence. Report `supported`, `revise`, or `insufficient` with the
-  specific consequence; the candidate is not silently rewritten or accepted.
+- **Interpreter:** own the explanation and final candidate. Investigate local
+  statistics and contrasts, request research only for a material knowledge
+  question, integrate its answer, and address substantive review findings.
+  Keep supported content when a proposed mechanism fails. The continuing
+  interpreter performs synthesis; no separate summarizer is needed.
+- **Researcher, when requested:** answer the specific biological or metadata
+  question, challenge as well as support the proposed connection, and return
+  findings with source scope and their consequence for the interpretation.
+  Do not write another complete feature report or require a mechanism.
+- **Independent reviewer:** assess the candidate against local evidence and
+  original cached sources without inheriting the interpreter's deliberation.
+  Judge coherence, coverage, quantitative fidelity and biological applicability,
+  not an expected feature class. An objection is itself a claim requiring evidence.
+  Return concise checks and material issues with `supported`, `revise` or
+  `insufficient`; do not silently rewrite the candidate or invent objections.
 
-Use the supplied `submit_report` fields. Lead with a concise English result;
+For a revision, change affected claims and check new assertions; do not repeat an
+entire investigation when the earlier checks remain valid. Persistent disagreements
+or missing evidence stay visible rather than triggering an indefinite conversation.
+The legacy five-stage comparator retains its assigned role contracts; these three
+responsibilities describe the adaptive workflow.
+
+Use the supplied role-specific submission fields. Lead with a concise English result;
 put traceable supporting claims in `claims`, competing explanations in
 `alternatives`, and only consequential gaps in `limitations`. A useful follow-up
 should discriminate unresolved explanations, not prescribe an entire new study.
+
+## 6. Write the result, not a disclaimer inventory
+
+Put the principal finding first: what activates, in which contexts, and what makes
+this feature distinctive. A well-supported association does not need to be preceded
+by "merely descriptive", "marginal" or "unvalidated". Broad and mixed features can
+have useful names; lack of a single taxon or mechanism is not itself failure.
+
+Keep common sampling/confirmation information in the shared methods scope. Mention
+it in the main statement only when essential to the feature's interpretation.
+Use `claims` for quantitative support and scoped subgroup biology, `changes` for
+responses to criticism, and `limitations` for unresolved issues that could change
+the main name, explanation or applicability. Do not restate the same limitation in
+all three places. Empty alternatives or limitations are appropriate when no material
+issue remains. Preserve genuine contradictions and meaningful uncertainty; the aim
+is informative specificity, not confidence for its own sake.

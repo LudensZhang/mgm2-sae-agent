@@ -11,6 +11,7 @@ import {run,localTools} from '../src/runner.mjs';
 import {profileFor,verifyWire,scopedOAuthStore} from '../src/profiles.mjs';
 import {canonicalUsage,sumCanonical} from '../src/accounting.mjs';
 import {skillText} from '../src/runtime.mjs';
+import {packRecords,unpackRecords,readMany,selectBrief,categoryAnnotation} from '../src/evidence_views.mjs';
 import {fileURLToPath} from 'node:url';
 
 const bundle=()=>({core:{feature_id:7,site:'otu_l4',k:16,
@@ -35,16 +36,71 @@ test('normalize preserves evidence and distinct denominators; removes old labels
   assert.ok(!JSON.stringify(p).includes('DO NOT SEND'));
   assert.ok(!JSON.stringify(overview(p)).includes('group_given_active'));
 });
+test('table transport is lossless including precision, null, zero and interpretation',()=>{
+  const records={'E.a':{value:{category:'a',rate:0.001100070631,missing:null,count:0},interpretation:'P(active|group)'},
+    'E.b':{value:{category:'b',rate:0.99,missing:null,count:2},interpretation:'P(active|group)'},
+    'E.c':{value:{nested:{n:9}},interpretation:'Nested scope'},'E.d':{value:[1,2],extra:true}};
+  const view=packRecords(records);assert.equal(view.tables.length,1);
+  assert.deepEqual(unpackRecords(view),records);
+});
+test('bulk reads never silently truncate records or count omitted IDs as read',()=>{
+  const packet={records:{'E.a':{value:'short'},'E.big':{value:'x'.repeat(2000)},'E.c':{value:3},'E.case.test':{value:4}}};
+  const view=readMany(packet,['E.a','E.big','E.c'],{maxChars:500});
+  assert.deepEqual(view.read_ids,['E.a']);assert.deepEqual(view.remaining_ids,['E.big','E.c']);
+  assert.deepEqual(unpackRecords(view),{'E.a':packet.records['E.a']});
+  assert.throws(()=>readMany(packet,['missing']));assert.throws(()=>readMany(packet,['E.a','E.a']));
+  assert.ok(!('E.case.test' in selectBrief(packet)));
+});
+test('abundance labels follow category values, never ID suffixes or row order',()=>{
+  const p={codebook:{abundance_bins:{0:'Low',1:'Lower-intermediate',2:'Intermediate',3:'Upper-intermediate',4:'High'}},
+    records:{'E.abundance_bins.3':{value:{category:1,background_share:0.15,active_share:0.25},interpretation:'Distinct denominators'}}};
+  const a=categoryAnnotation(p,'E.abundance_bins.3');assert.equal(a.label,'Lower-intermediate');
+  assert.equal(readEvidence(p,{id:'E.abundance_bins.3'}).category_annotation.label,a.label);
+  const view=readMany(p,['E.abundance_bins.3']);assert.equal(view.category_annotations['E.abundance_bins.3'].label,a.label);
+  assert.deepEqual(unpackRecords(view),p.records);
+  assert.equal(categoryAnnotation({...p,codebook:{}},'E.abundance_bins.3'),undefined);
+});
 test('confirmation and tuning evidence rejected',()=>{
   let b=bundle();b.core.scope.partition='confirmation';assert.throws(()=>normalizePacket(b));
   b=bundle();b.core.scope.tuning_exposed=true;assert.throws(()=>normalizePacket(b));
 });
-test('privacy guard checks raw IDs and credentials, not generic manifest keys',()=>{
+test('all four discovery analysis families and case selection reach the reader losslessly',()=>{
+  const b=bundle();b.core.annex_available={case_groups:{top_examples:['EVENT_1'],random_zero_examples:['EVENT_2']}};
+  b.diagnostics={partition:'discovery',analyses:{
+    study_rates:{top_studies:[{study:'PRJNA123456',events:80,active:3}],leave_top_five_out:{remaining_active:9}},
+    continuous_abundance:{groups:{active:{activation:{median:0.001}}}},
+    within_otu:{same_otu_and_study:{eligible_groups:2,profiles:[{active:0,events:8}]}},
+    matched_contrasts:{joint:{pairs:[{same_bin:false,same_study:true}]}},
+    previous_model_opinion:{label:'DO NOT SEND'}}};
+  const p=normalizePacket(b);
+  for(const family of ['study_rates','continuous_abundance','within_otu','matched_contrasts']){
+    for(const [section,value] of Object.entries(b.diagnostics.analyses[family])){
+      const id=`A.${family}.${section}`;
+      assert.deepEqual(JSON.parse(readEvidence(p,{id}).text).value,value);
+      assert.ok(overview(p).analysis_index.includes(id));
+    }
+  }
+  assert.deepEqual(p.records['X.case_groups'].value,b.core.annex_available.case_groups);
+  assert.ok(!JSON.stringify(p).includes('DO NOT SEND'));
+  b.diagnostics.partition='tuning';assert.throws(()=>normalizePacket(b),/discovery/);
+});
+test('analysis IDs cannot silently overwrite population evidence',()=>{
+  const b=bundle();b.analysis_results={'E.population':{value:{events:0}}};
+  assert.throws(()=>normalizePacket(b),/Duplicate evidence/);
+});
+test('privacy guard permits public accessions but blocks restricted IDs and credentials',()=>{
   const ids=privateIdentifiers({samples:['private-sample-abcdef'],studies:['private-study-abcdef']});
   checkPrivacy('100 samples in 5 studies',ids);
-  for(const value of ['PRJNA123456','SRR123456','/home/alice/key','private-sample-abcdef','{"api_key":"secret"}'])
+  checkPrivacy('Public study PRJNA123456 and run SRR123456',ids);
+  for(const value of ['/home/alice/key','private-sample-abcdef','{"api_key":"secret"}'])
     assert.throws(()=>checkPrivacy(value,ids));
   assert.throws(()=>privateIdentifiers({samples:'bad'}));
+  const mapping={samples:['private-sample-abcdef'],studies:['PRJNA123456','restricted-study']};
+  assert.throws(()=>checkPrivacy('PRJNA123456',privateIdentifiers(mapping)));
+  checkPrivacy('PRJNA123456',privateIdentifiers(mapping,['PRJNA123456']));
+  assert.throws(()=>checkPrivacy('restricted-study',privateIdentifiers(mapping,['PRJNA123456'])));
+  assert.throws(()=>privateIdentifiers(mapping,['private-sample-abcdef']));
+  assert.throws(()=>privateIdentifiers(mapping,['PRJNA999999']));
 });
 test('JSON pointer, exact pagination, unknown and prototype paths',()=>{
   const p=normalizePacket(bundle());
@@ -81,11 +137,12 @@ test('public URL constraints reject local and credential URLs',()=>{
   for(const u of ['http://example.org','https://127.0.0.1','https://localhost','https://a.local',
     'https://user:secret@example.org','https://example.org:8080'])assert.throws(()=>publicUrl(u));
 });
-test('source view redacts navigation paths and accessions without changing the archive',()=>{
+test('source view retains public accessions and redacts paths without changing the archive',()=>{
   const raw={text:'Anaerobic growth. href="/home/journal" PRJNA123456 https://example.org/paper',
     sha256:'original-hash',offset:0,next_offset:7000};
   const view=sourceForModel(raw);checkPrivacy(view);
-  assert.equal(view.model_text_redactions,2);assert.ok(view.text.includes('Anaerobic growth.'));
+  assert.equal(view.model_text_redactions,1);assert.ok(view.text.includes('Anaerobic growth.'));
+  assert.ok(view.text.includes('PRJNA123456'));
   assert.equal(view.sha256,raw.sha256);assert.equal(view.next_offset,7000);
   assert.ok(raw.text.includes('PRJNA123456'));assert.ok(raw.text.includes('/home/journal'));
   assert.equal(sourceForModel([]).length,0);
@@ -118,6 +175,12 @@ test('only both selected project skills are loaded, with their full bodies',asyn
 // schema/serialization is tested by the separate, explicitly authorized live run.
 const Type=new Proxy({}, {get:()=>()=>({})});
 test('exact model profiles and wire reasoning cannot silently drift',()=>{
+  const current=profileFor('gpt-6.1-sol');
+  assert.equal(current.thinking,'high');assert.equal(current.provider,'openai');
+  assert.equal(current.model,'gpt-6.1-sol');assert.equal(current.billing,'chatgpt_subscription_oauth');
+  verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'high'},store:false,stream:true},current);
+  assert.throws(()=>verifyWire({model:'gpt-6-sol',reasoning:{effort:'high'},store:false,stream:true},current));
+  assert.throws(()=>verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'max'},store:false,stream:true},current));
   const p=profileFor('gpt-6-sol');assert.equal(p.thinking,'high');assert.equal(p.billing,'chatgpt_subscription_oauth');
   verifyWire({model:'gpt-6-sol',reasoning:{effort:'high'},store:false,stream:true},p);
   assert.throws(()=>verifyWire({model:'gpt-6.1-sol',reasoning:{effort:'high'},store:false,stream:true},p));
@@ -162,7 +225,8 @@ test('audit must read candidate sources, not only its own narrower claim citatio
   const submit=localTools(Type,{packet,archive,role:'audit',readEvidenceIds:new Set(['E.population']),
     readSources,candidate,setReport:p=>{submitted=p;}}).find(x=>x.name==='submit_report');
   await assert.rejects(submit.execute('1',r),/candidate source/);assert.equal(submitted,undefined);
-  readSources.add(source.id);await submit.execute('2',r);assert.equal(submitted,r);
+  readSources.add(source.id);const result=await submit.execute('2',r);assert.equal(submitted,r);
+  assert.equal(result.terminate,true);
 });
 test('dry run requires no Pi, network or credential and cannot overwrite',async t=>{
   const root=await temporary(t),path=join(root,'packet.json'),out=join(root,'run');await save(path,bundle());

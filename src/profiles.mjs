@@ -1,4 +1,8 @@
 const PROFILES={
+  'gpt-6.1-sol':{provider:'openai',model:'gpt-6.1-sol',thinking:'high',
+    baseUrl:'https://api.openai.com/v1',billing:'chatgpt_subscription_oauth',wireOutputCap:null,
+    service:'GPT-6.1 Sol through Pi and Sign in with ChatGPT; not GPT-6 Sol or the Codex CLI',
+    source:'https://developers.openai.com/api/docs/models/gpt-6.1-sol'},
   'deepseek-flash':{provider:'deepseek',model:'deepseek-flash',thinking:'max',
     baseUrl:'https://api.deepseek.com',billing:'api_key',wireOutputCap:16384,
     service:'DeepSeek-V4.1-Flash-1017; documented alias, not immutable snapshot',
