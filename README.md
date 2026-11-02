@@ -1,268 +1,259 @@
-# MGM2 SAE interpretation agent
+<div align="center">
 
-A lightweight, evidence-first microbial SAE interpreter built on **Pi**, separate
-from personal Pi configuration and from the historical Codex harness. All role
-prompts and reports are English. This is a development harness, not a validated
-biological annotation system or a completed model-comparison benchmark.
+# MGM2 SAE Agent
+
+### From sparse activations to biological explanations
+
+An evidence-driven, multi-agent workflow for interpreting microbial sparse autoencoder features.
+
+![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.19-278D95?style=flat-square)
+![Runtime](https://img.shields.io/badge/runtime-Pi_1.4.0-555C9D?style=flat-square)
+![Workflow](https://img.shields.io/badge/workflow-interpret_%C2%B7_research_%C2%B7_review-58983E?style=flat-square)
+
+[Overview](#overview) · [Workflow](#workflow) · [Quick start](#quick-start) · [Evidence](#evidence) · [Outputs](#outputs) · [Development](#development)
+
+</div>
+
+## Overview
+
+What does a learned microbial feature represent: a lineage, an abundance pattern,
+a community context, or a shared ecological relationship?
+
+MGM2 SAE Agent connects feature activations to biological interpretation through
+population statistics, taxonomic annotations, community comparisons, study
+metadata, and targeted literature research. Built on [Pi](https://github.com/earendil-works/pi),
+it brings these evidence sources into a coordinated interpretation and review
+workflow, with a traceable record of the reasoning inputs and final claims.
+
+- **Biology at multiple scales.** Examine individual OTUs, abundance distributions,
+  surrounding communities, habitats, and variation across studies.
+- **Research where it adds insight.** Use local evidence to describe activation
+  patterns and consult the literature to resolve ecological or mechanistic questions.
+- **Continuity across roles.** The interpreter develops the explanation, a researcher
+  supplies focused findings, and a reviewer checks the resulting claims.
+- **An inspectable result.** Each interpretation links back to evidence IDs and
+  archived sources, accompanied by review, timing, and usage records.
 
 ## Workflow
 
-The current development workflow is selected explicitly with `--workflow adaptive`:
+```mermaid
+flowchart LR
+    E["Feature evidence"] --> I["Interpreter"]
+    I -->|Focused question| R["Researcher"]
+    R -->|Sourced findings| I
+    I -->|Candidate interpretation| V["Reviewer"]
+    V -->|One material revision| I
+    V --> O["Interpretation + review"]
 
-`interpreter → [researcher when needed → same interpreter] → independent reviewer`
-
-There are three logical roles but ordinarily only two sessions when external
-knowledge is unnecessary. The interpreter retains its Pi session across research
-and review handoffs and owns the final candidate. The researcher answers a concrete
-question, not another full feature report. The reviewer returns compact checks and
-material issues, not a replacement interpretation. A material revision returns to
-the same interpreter and reviewer; no extra final-summary agent is launched.
-The reviewer does not receive the interpreter's deliberation or research answer.
-Local statistical findings do not require literature. Meaningful ecological
-relationships and subgroups may warrant research without a preset coverage cutoff.
-
-The pilot allows two research requests and one material revision within the total
-40-request bound. These are operational limits, not confidence scores. An unresolved
-review is saved as `needs_review`, never silently accepted. Shared source caching
-stores original fetch extracts and their hashes/timestamps, not other feature labels
-or interpretations. Each role must still inspect the evidence it uses.
-
-The historical comparator remains available as `--workflow legacy` (the backward-
-compatible CLI default):
-
-`observe → literature → critic → synthesis → audit`
-
-Each role is a fresh Pi SDK session with a small, explicit handoff. The observer
-examines activation statistics and controls; the literature role tests biological
-interpretations; the critic checks alternatives; the synthesis responds to the
-critique; the auditor independently reads evidence and cached sources. There is
-no prescribed feature class or expected interpretation. The final interpretation
-and audit remain separate: `revise` is not silently promoted to accepted.
-
-The comparator uses five actual independent model sessions, not five labels inside one
-chat. The orchestration is a fixed sequential chain, not autonomous delegation
-or a debate scheduler. Whether every role improves quality needs ablation;
-completion alone does not prove the necessity of five agents.
-
-Only two project-local skills are loaded, in full: `sae-interpretation` and
-`source-grounding`. The skills substantively adapt K-Dense's critical-thinking
-and literature-review methods to OTU/community evidence. It preserves research
-question formation, source appraisal, bias assessment, competing explanations,
-and independent verification. No collection-wide installation or modification of
-personal skills is performed. See [adaptation provenance](docs/REFERENCES.md).
-
-The prompt contains an overview and evidence index, **not the complete bundle**.
-Agents retrieve exact, paginated records using IDs and JSON Pointers. Report
-validation checks structure and citation existence, not scientific correctness.
-Events, communities and studies retain their original denominators.
-
-The [efficiency revision](docs/EFFICIENCY.md) adds lossless grouped evidence reads
-and native terminal report submission, without removing any role or skill.
-Use `evidence_brief` for the complete exported summary and `evidence_read_many`
-for selected records; follow `remaining_ids` when a bundle is size-limited.
-
-## Setup
-
-Requires Node.js **22.19+** and Pi **1.4.0**. Either reuse an existing Pi install:
-
-```sh
-export SAE_PI_PACKAGE=/path/to/node_modules/@earendil-works/pi-coding-agent
+    classDef evidence fill:#F2F5F5,stroke:#A8B6BC,color:#26343D
+    classDef interpret fill:#E8F3F3,stroke:#278D95,color:#26343D
+    classDef research fill:#F0EFF7,stroke:#555C9D,color:#26343D
+    classDef review fill:#EEF4E9,stroke:#58983E,color:#26343D
+    class E,O evidence
+    class I interpret
+    class R research
+    class V review
 ```
 
-or install the pinned project dependencies:
+**Interpreter.** Reads activation summaries and diagnostic comparisons, develops
+the feature explanation, and owns the final report. Its session persists across
+research and review handoffs.
 
-```sh
+**Researcher.** Answers a concrete biological question using public sources.
+Research is activated when external knowledge is useful; statistical descriptions
+can proceed directly to review. Retrieved passages are archived for reuse.
+
+**Reviewer.** Independently checks numerical statements, evidence coverage,
+biological reasoning, and source support. Material feedback returns to the same
+interpreter for one revision, followed by another review.
+
+The adaptive workflow uses two sessions for evidence-only explanations and adds
+the researcher when needed. It supports two research requests per feature and
+retains the final review verdict alongside the interpretation.
+
+## Quick start
+
+### 1. Install
+
+Requires **Node.js 22.19+**. The project pins **Pi 1.4.0**.
+
+```bash
+git clone https://github.com/LudensZhang/mgm2-sae-agent.git
+cd mgm2-sae-agent
 npm ci --ignore-scripts
 ```
 
-For web-enabled runs, point to an existing, unchanged `pi-web-access` **0.45.0**:
+An existing Pi installation can also be selected with `SAE_PI_PACKAGE`:
 
-```sh
+```bash
+export SAE_PI_PACKAGE=/path/to/node_modules/@earendil-works/pi-coding-agent
+```
+
+For literature retrieval, install or reuse **pi-web-access 0.45.0** and set its path:
+
+```bash
 export SAE_WEB_PACKAGE=/path/to/node_modules/pi-web-access
 ```
 
-The default plugin location is `~/.pi/agent/npm/node_modules/pi-web-access`.
-The original MCP entry point is used; this project does not patch the plugin.
-`pi-subagents` remains installed and untouched, but is **not invoked** by this
-batch harness: the roles are explicit SDK sessions. No global extensions,
-personal skills, personal model defaults, shell tools or arbitrary file tools are
-exposed to the interpreting model.
+The default location is `~/.pi/agent/npm/node_modules/pi-web-access`. The agent
+uses its MCP interface, Exa search, and PDF text extraction. Runtime resources
+and scientific skills are scoped to this project.
 
-Credentials: set `DEEPSEEK_API_KEY` in your environment, or let the runner read
-only the `deepseek` API-key entry from `~/.pi/agent/auth.json`. A different private
-credential-file location can be supplied with `--auth-path`. Do not put a key in
-a command argument, packet, committed file or issue. DeepSeek has no OAuth,
-gateway or Bailian fallback. Shell-command credentials are not supported.
+### 2. Configure a model
 
-For current SAE selection, `--model gpt-6.1-sol` uses the existing
-Pi `openai` OAuth credential with the `chatgpt.tokens.use.direct` scope. The Pi
-SDK locks and persists normal refresh-token rotation in the original auth file;
-other provider entries are preserved. Inference uses `api.openai.com/v1` through
-`SAE_OPENAI_PROXY` (default `http://127.0.0.1:17897`). It does not use the legacy
-Codex endpoint or an API-key fallback. This route **consumes ChatGPT subscription
-usage**; running through Pi does not make Sol quota-free.
+| Model profile | Reasoning | Authentication | Service |
+| --- | --- | --- | --- |
+| `gpt-6.1-sol` | `high` | Pi OpenAI / Sign in with ChatGPT | `api.openai.com/v1` |
+| `deepseek-flash` | `max` | `DEEPSEEK_API_KEY` or Pi DeepSeek credentials | `api.deepseek.com` |
 
-## Run
+GPT-6.1 Sol uses the existing Pi OAuth sign-in with the
+`chatgpt.tokens.use.direct` scope and is billed against ChatGPT subscription usage.
+The SDK manages credential refresh. Its proxy is configured through
+`SAE_OPENAI_PROXY`, which defaults to `http://127.0.0.1:17897`.
 
-Prepare a packet **offline**, without Pi credentials or network access:
+DeepSeek uses the official Flash profile, identified in the configuration as
+**DeepSeek-V4.1-Flash-1017**. Credentials are read from the environment or the
+selected provider entry in `~/.pi/agent/auth.json`. Use `--auth-path` to select
+another credential file.
 
-```sh
-node src/cli.mjs --packet /private/anonymized/bundle.json --out runs/preflight
+The selected model and reasoning effort are checked against each serialized
+request and recorded in the run artifacts.
+
+### 3. Prepare the evidence
+
+Run an offline preflight to normalize the packet, check its structure and
+identifier policy, and write the evidence overview:
+
+```bash
+node src/cli.mjs \
+  --workflow adaptive --model gpt-6.1-sol \
+  --packet /path/to/feature/bundle.json \
+  --out runs/feature-preflight
 ```
 
-Explicitly authorize a bounded live development run:
+### 4. Interpret a feature
 
-```sh
-node src/cli.mjs --packet /private/anonymized/bundle.json \
-  --out runs/feature-debug-01 --live --web
+```bash
+node src/cli.mjs \
+  --workflow adaptive --model gpt-6.1-sol \
+  --packet /path/to/feature/bundle.json \
+  --out runs/feature-sol61 \
+  --source-cache runs/shared-sources \
+  --live --web
 ```
 
-Use a new output directory for each attempt. Existing attempts are never
-overwritten or automatically resumed. Omitting `--web` disables live retrieval;
-it does **not** simulate successful literature validation.
+`--live` starts provider requests; `--web` enables literature retrieval.
+Use a fresh output directory for each attempt. The optional source cache shares
+original retrieved passages across runs, while each interpretation retains its
+own evidence, source, and review records.
 
-Development is pinned to official `deepseek / deepseek-flash`, `max`, at
-`https://api.deepseek.com`. DeepSeek documents this alias as
-**DeepSeek-V4.1-Flash-1017**; an alias is not an immutable backend snapshot. The
-runner verifies model/provider and the serialized reasoning-effort setting.
-Current SAE selection explicitly uses **`gpt-6.1-sol` / high**:
+To run the same workflow with DeepSeek, select `--model deepseek-flash`.
+The manifest records the model, reasoning, retrieval, timing, and output settings
+used for each run.
 
-```sh
-node src/cli.mjs --model gpt-6.1-sol --packet /private/anonymized/bundle.json \
-  --out runs/feature-sol61-high-01 --live --web
+## Evidence
+
+Agents start with an overview and an evidence index, then retrieve the records
+needed for their current question. Grouped reads make the exported summaries
+available efficiently; individual records remain addressable by ID and JSON
+Pointer.
+
+| Evidence | Questions it helps answer |
+| --- | --- |
+| Activation census | How broadly does the feature activate across tokens, communities, and studies? |
+| Taxonomy and habitat | Which lineages and environments contribute activations, and which are enriched? |
+| Abundance profiles | Does activation track abundance, within-community rank, or a particular abundance range? |
+| Community context | How do diversity, dominance, and composition differ around active tokens? |
+| Within-OTU and matched comparisons | How does the same organism behave across community contexts? |
+| Public study metadata | Does the signal track an ecological setting, a study, or an assay? |
+| Retrieved literature | Which biological relationships help explain the observed pattern? |
+
+Packets expose `core.facts`, selected cases, matched controls, and exported
+`analysis_results`. Event-, community-, and study-level quantities retain their
+respective denominators. Abundance labels are resolved from the packet's codebook,
+and packet metadata records the scope and provenance of the evidence.
+
+Verified public study accessions remain available for interpretation and source
+lookup. Private identifier checks run locally before live execution.
+
+### Source grounding
+
+Research archives the exact text returned by retrieval, together with its URL,
+timestamp, and content hash. The reviewer can inspect the cited passages directly
+from the shared archive. Source IDs connect the final claims to these records,
+making both the biological explanation and its supporting material easy to inspect.
+
+## Outputs
+
+Each run produces a self-contained result directory:
+
+```text
+runs/feature-sol61/
+├── interpretation.json     # Feature name, explanation, and evidence-linked claims
+├── audit.json              # Reviewer assessment and material issues
+├── completion.json         # Final status, elapsed time, and aggregate usage
+├── manifest.json           # Model settings, packet hash, and code hashes
+├── packet.json             # Normalized evidence
+├── overview.json           # Evidence index
+├── sources/                # Archived source passages and provenance
+├── interpret/              # Interpreter sessions and request records
+├── research/               # Research sessions, when activated
+└── review/                 # Reviewer sessions and request records
 ```
 
-For the adaptive pilot, after authorizing the specific evidence export:
+Start with `interpretation.json` and `audit.json`. The completion record reports
+`complete`, `needs_review`, or `failed`, together with research requests and
+revision counts. Session records expose the actual request model, reasoning
+effort, tool activity, and phase-level usage.
 
-```sh
-node src/cli.mjs --workflow adaptive --model gpt-6.1-sol \
-  --packet /reviewed/export/bundle.json --out runs/feature-adaptive-01 \
-  --source-cache runs/shared-original-sources --live --web
-```
+Usage reports separate input, output, and cached-input tokens. Cost fields carry
+Pi's model-catalog estimates; subscription quota is tracked through the provider's
+account interface. Each attempt keeps its own result and usage history.
 
-Omit `--live` for an offline preflight. The optional source cache is a local folder;
-only the research role can search/import its original text. A formal model comparison
-should freeze cache availability and inputs across models, rather than mix cold and
-warm caches without recording the difference.
+## Development
 
-The separate `gpt-6-sol` / high profile remains available only for explicitly
-requested historical comparisons; neither Sol model substitutes for the other.
-The runtime verifies the exact requested model and the serialized request's
-model ID and reasoning effort before every call. An unavailable model fails
-without fallback. [GPT-6.1 Sol documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+The project loads two domain-specific skills in full:
 
-None of these profiles invokes the Codex CLI or any Bailian model. Old Codex logs can
-be compared retrospectively but are not a controlled harness-only experiment.
+- [`sae-interpretation`](skills/sae-interpretation/SKILL.md): activation statistics,
+  microbial taxonomy, community context, biological interpretation, and review.
+- [`source-grounding`](skills/source-grounding/SKILL.md): research questions,
+  source appraisal, evidence extraction, and claim-level support.
 
-Bounds per feature: 40 provider requests, 10 per role, 6 searches, 6 source
-fetches, 12 cached-content slices, 15 minutes total and 5 minutes per role;
-16,384 output tokens per DeepSeek request (including reasoning). For OpenAI
-ChatGPT OAuth the pinned SDK omits that unsupported wire parameter: there is
-**no enforced per-request output-token cap**. Both requested and actual wire
-behavior are recorded in the manifest. Requests and wall time are bounded,
-but this is **not a fixed dollar spending cap**. Automatic provider retries are
-disabled. The CLI exits nonzero on failure and preserves partial results.
-The adaptive workflow keeps the same total request/search/fetch/time bounds, but
-allows up to 16 provider requests per logical role across its continuing phases;
-each phase has a five-minute ceiling. Role counts are not fixed API-call counts.
+These skills adapt scientific critical-thinking and literature-review methods
+from [K-Dense Scientific Agent Skills](https://github.com/K-Dense-AI/scientific-agent-skills)
+to microbial representation analysis. See [design references](docs/REFERENCES.md)
+and [adaptation attribution](docs/KDENSE_LICENSE.txt).
 
-## Evidence and source contract
+Run the offline regression suite:
 
-The input adapter accepts `core.facts` (or `evidence.facts`), sample-aliased cases,
-matched controls and explicitly exported deterministic `analysis_results`.
-Discovery-only `diagnostics.analyses` exposes four allowlisted families as
-`A.*` records: study rates, continuous abundance, within-OTU comparisons and
-matched contrasts. Case-selection groups remain distinct from population data.
-Prior model interpretations, previous source claims and selection strata are
-not handed to agents. Only discovery evidence is allowed when a partition is
-declared. The adapter is **not an anonymizer or a complete DLP system**: prepare
-and review exports upstream. A sibling `private_identifiers.json` containing
-arrays of raw sample/study IDs is used as an additional local deny-list and is
-never sent to the model.
-Verified public study accessions may be retained through the host-side
-`export_policy.public_study_accessions` allowance. This allowance covers verified
-public studies that may also appear in retrieved literature, not only studies
-displayed in a feature's selected examples. Private sample identifiers remain
-blocked. No raw identifier manifest or host-side allowance list is itself handed
-to the interpreter.
-
-Live retrieval uses a fixed Exa backend through the plugin, without a secondary
-LLM summarizer, browser cookies, remote hosted fetch providers or a paid PDF
-model. PDF extraction uses `unpdf`. Public search queries and selected excerpts
-leave the machine. The archive stores the plugin's **exact returned text**, URL,
-timestamp and hash; it does not claim to contain an entire paper or PDF. Failed
-fetches and search snippets must not be promoted to full-text evidence.
-Model-facing source slices retain public accessions and mark redacted path-like
-navigation (including publisher `/home/` links). Original text is preserved locally; pagination offsets and
-source hashes refer to that original, not the redacted display.
-
-Other roles read the archive locally. The auditor must read source IDs cited by
-the candidate, including disputed claims. Reading an excerpt is a necessary
-condition, not proof that an agent understood or adequately checked it.
-
-### Evidence repair and retrieval-necessity review
-
-`scripts/repair_packets.py` builds versioned discovery-only packets from hashed
-small caches and a streamed event table. It adds public metadata, strict-control
-coverage, strong-activation tails and sample concentration without loading the
-original large pickle or retraining an SAE. Previous packets/reports are retained.
-`scripts/audit_repair_pilot.mjs` checks transport, arithmetic, recorded model/high
-settings and paired historical usage. `tests/test_repair_packets.py` checks the
-exporter's pure helper behavior. The four-case pilot and separately authorized
-public-study retry scripts are experiment-specific, not full-panel launchers.
-
-`scripts/audit_literature_need.mjs` inventories a completed panel and records
-explicitly reviewed claim-level examples. Counts of citations or biological
-hypotheses are not counts of features needing retrieval. Descriptive statistical
-claims do not require a paper; study metadata lookup, taxonomy resolution and
-mechanistic research are separate needs. The proposed two-session interpretation
-plus independent-review workflow with conditional retrieval is implemented separately
-under `src/adaptive*.mjs`; the earlier repaired-evidence pilot preserves its frozen
-five-session results. `scripts/run_adaptive_pilot.py` dispatches only its four
-explicitly authorized cases, using two workers and no automatic retries.
-
-Offline regression commands:
-
-```sh
+```bash
 node tests/core.test.mjs
 node tests/adaptive.test.mjs
 node tests/terminal_sdk.test.mjs
 python tests/test_repair_packets.py
 ```
 
-The SDK integration tests use synthetic responses and an in-memory fake credential;
-they make no provider requests. The adaptive test verifies continued context after a
-terminal research request, not just a mocked sequence of role names.
+The tests cover packet normalization, evidence transport, abundance labels,
+source access, role handoffs, review revisions, and terminal report submission.
+SDK tests use synthetic responses and in-memory credentials.
 
-## Outputs and reproducibility
+<details>
+<summary>Legacy workflow and comparison tools</summary>
 
-- `manifest.json`: code/packet hashes, declared model route and budgets.
-- `<role>/prompt.json`, `invocation.json`, `events.jsonl`, `report.json`,
-  `completion.json`: private audit trail, wire metadata and usage per role.
-- `sources/`: immutable retrieval snapshots reused across roles.
-- `interpretation.json`, `audit.json`, `completion.json`: candidate, internal
-  assessment and total runtime/usage. Inspect the audit verdict as well as status.
+The five-role workflow remains available through `--workflow legacy`:
 
-Token fields are the Pi/API-reported usage fields; cached input is separate.
-Dollar amounts are **Pi model-catalog estimates**, not an invoice. Pro weekly
-quota percentages cannot be inferred from them. The internal same-model auditor
-is not the planned independent GPT-6-astra blinded judge.
-
-`runs/`, caches, datasets, local credentials and `node_modules/` are ignored.
-Keep scientific data and logs outside Git. Commit source, prompts, synthetic
-tests and documentation only. See [design references](docs/REFERENCES.md).
-
-## Tests and next steps
-
-```sh
-node tests/core.test.mjs
-node tests/terminal_sdk.test.mjs
+```text
+observe → literature → critic → synthesis → audit
 ```
 
-Tests are synthetic and offline. Live trials must be reviewed for evidence
-coverage, denomination errors, unsupported mechanisms and source usefulness.
-Next: review a small varied feature panel, freeze the final SAE/evidence set,
-then add the independently blinded judge. Providers beyond the two exact profiles,
-batch recovery and formal benchmark scoring are not implemented. Do not
-extrapolate quality or speed from one feature, and do not convert API token sums
-to a claimed percentage of Pro weekly quota.
+Each role uses a separate Pi session with an explicit handoff. The CLI's
+compatibility default is `legacy`; the quick-start commands explicitly select
+`adaptive`. A separate `gpt-6-sol` / `high` profile supports historical comparisons.
+
+`scripts/profile_runs.mjs` summarizes phase-level usage and tool activity.
+`scripts/audit_literature_need.mjs` supports claim-level retrieval analysis.
+`scripts/repair_packets.py` rebuilds evidence packets from cached statistics and
+streamed event data. Experiment-specific pilot scripts retain their original
+feature selections and run configurations.
+
+</details>
