@@ -4,78 +4,48 @@
 
 ### From sparse activations to biological explanations
 
-An evidence-driven, multi-agent workflow for interpreting microbial sparse autoencoder features.
+Interpret microbial features through local evidence, targeted research, and independent review.
 
 ![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.19-278D95?style=flat-square)
-![Runtime](https://img.shields.io/badge/runtime-Pi_1.4.0-555C9D?style=flat-square)
-![Workflow](https://img.shields.io/badge/workflow-interpret_%C2%B7_research_%C2%B7_review-58983E?style=flat-square)
+![Built on Pi](https://img.shields.io/badge/built_on-Pi-555C9D?style=flat-square)
 
-[Overview](#overview) · [Workflow](#workflow) · [Quick start](#quick-start) · [Evidence](#evidence) · [Outputs](#outputs) · [Development](#development)
+[Overview](#overview) · [Workflow](#workflow) · [Getting started](#getting-started) · [Results](#results)
 
 </div>
 
 ## Overview
 
-What does a learned microbial feature represent: a lineage, an abundance pattern,
-a community context, or a shared ecological relationship?
+MGM2 SAE Agent helps you understand what a sparse autoencoder feature captures
+in microbial communities—from taxonomic preferences and abundance patterns to
+habitat associations and ecological relationships.
 
-MGM2 SAE Agent connects feature activations to biological interpretation through
-population statistics, taxonomic annotations, community comparisons, study
-metadata, and targeted literature research. Built on [Pi](https://github.com/earendil-works/pi),
-it brings these evidence sources into a coordinated interpretation and review
-workflow, with a traceable record of the reasoning inputs and final claims.
-
-- **Biology at multiple scales.** Examine individual OTUs, abundance distributions,
-  surrounding communities, habitats, and variation across studies.
-- **Research where it adds insight.** Use local evidence to describe activation
-  patterns and consult the literature to resolve ecological or mechanistic questions.
-- **Continuity across roles.** The interpreter develops the explanation, a researcher
-  supplies focused findings, and a reviewer checks the resulting claims.
-- **An inspectable result.** Each interpretation links back to evidence IDs and
-  archived sources, accompanied by review, timing, and usage records.
+Provide the evidence for a feature, and the agent develops a biological
+interpretation, investigates relevant literature, and reviews the explanation
+against the data. The result is a concise feature description with traceable
+supporting evidence.
 
 ## Workflow
 
-```mermaid
-flowchart LR
-    E["Feature evidence"] --> I["Interpreter"]
-    I -->|Focused question| R["Researcher"]
-    R -->|Sourced findings| I
-    I -->|Candidate interpretation| V["Reviewer"]
-    V -->|One material revision| I
-    V --> O["Interpretation + review"]
+![SAE interpretation workflow: local feature evidence enters an interpreter, an on-demand researcher supplies cached sources, and an independent reviewer assesses the candidate and requests revision when needed.](docs/assets/sae-interpretation-workflow.png)
 
-    classDef evidence fill:#F2F5F5,stroke:#A8B6BC,color:#26343D
-    classDef interpret fill:#E8F3F3,stroke:#278D95,color:#26343D
-    classDef research fill:#F0EFF7,stroke:#555C9D,color:#26343D
-    classDef review fill:#EEF4E9,stroke:#58983E,color:#26343D
-    class E,O evidence
-    class I interpret
-    class R research
-    class V review
-```
+- **Interpret.** Identify the feature's activation pattern using taxonomy,
+  abundance, community context, and study-level evidence.
+- **Research.** Investigate biological questions as they arise and retain the
+  original source excerpts for shared reference.
+- **Review.** Check the explanation against the evidence and refine it through
+  a revision when needed.
 
-**Interpreter.** Reads activation summaries and diagnostic comparisons, develops
-the feature explanation, and owns the final report. Its session persists across
-research and review handoffs.
+The interpreter keeps its context throughout the process. Literature research
+is used where it adds biological insight, and the final description is delivered
+together with the review.
 
-**Researcher.** Answers a concrete biological question using public sources.
-Research is activated when external knowledge is useful; statistical descriptions
-can proceed directly to review. Retrieved passages are archived for reuse.
+## Getting started
 
-**Reviewer.** Independently checks numerical statements, evidence coverage,
-biological reasoning, and source support. Material feedback returns to the same
-interpreter for one revision, followed by another review.
+### Install
 
-The adaptive workflow uses two sessions for evidence-only explanations and adds
-the researcher when needed. It supports two research requests per feature and
-retains the final review verdict alongside the interpretation.
-
-## Quick start
-
-### 1. Install
-
-Requires **Node.js 22.19+**. The project pins **Pi 1.4.0**.
+Requires **Node.js 22.19+**, a configured model account in **Pi**, and
+**pi-web-access** for literature retrieval. The project uses Pi 1.4.0 and
+pi-web-access 0.45.0.
 
 ```bash
 git clone https://github.com/LudensZhang/mgm2-sae-agent.git
@@ -83,177 +53,69 @@ cd mgm2-sae-agent
 npm ci --ignore-scripts
 ```
 
-An existing Pi installation can also be selected with `SAE_PI_PACKAGE`:
+### Provide a feature evidence packet
 
-```bash
-export SAE_PI_PACKAGE=/path/to/node_modules/@earendil-works/pi-coding-agent
-```
+The input is a `bundle.json` file containing the feature's activation statistics
+and biological context.
 
-For literature retrieval, install or reuse **pi-web-access 0.45.0** and set its path:
+| Evidence | What it reveals |
+| --- | --- |
+| Activation statistics | How broadly the feature appears across OTUs, communities, and studies |
+| Taxonomy and habitats | Which organisms and environments are associated with activation |
+| Abundance and community profiles | How activation relates to abundance, diversity, and dominance |
+| Matched comparisons | How the same organism behaves in different community contexts |
+| Study metadata | Connections to sampling environments, cohorts, and experimental settings |
 
-```bash
-export SAE_WEB_PACKAGE=/path/to/node_modules/pi-web-access
-```
+Packets organize summary statistics in `core.facts`, examples and controls in
+`annex`, and additional analyses in `analysis_results`. The agent reads the
+evidence relevant to each question and links its claims to the underlying records.
 
-The default location is `~/.pi/agent/npm/node_modules/pi-web-access`. The agent
-uses its MCP interface, Exa search, and PDF text extraction. Runtime resources
-and scientific skills are scoped to this project.
-
-### 2. Configure a model
-
-| Model profile | Reasoning | Authentication | Service |
-| --- | --- | --- | --- |
-| `gpt-6.1-sol` | `high` | Pi OpenAI / Sign in with ChatGPT | `api.openai.com/v1` |
-| `deepseek-flash` | `max` | `DEEPSEEK_API_KEY` or Pi DeepSeek credentials | `api.deepseek.com` |
-
-GPT-6.1 Sol uses the existing Pi OAuth sign-in with the
-`chatgpt.tokens.use.direct` scope and is billed against ChatGPT subscription usage.
-The SDK manages credential refresh. Its proxy is configured through
-`SAE_OPENAI_PROXY`, which defaults to `http://127.0.0.1:17897`.
-
-DeepSeek uses the official Flash profile, identified in the configuration as
-**DeepSeek-V4.1-Flash-1017**. Credentials are read from the environment or the
-selected provider entry in `~/.pi/agent/auth.json`. Use `--auth-path` to select
-another credential file.
-
-The selected model and reasoning effort are checked against each serialized
-request and recorded in the run artifacts.
-
-### 3. Prepare the evidence
-
-Run an offline preflight to normalize the packet, check its structure and
-identifier policy, and write the evidence overview:
+### Run an interpretation
 
 ```bash
 node src/cli.mjs \
   --workflow adaptive --model gpt-6.1-sol \
   --packet /path/to/feature/bundle.json \
-  --out runs/feature-preflight
-```
-
-### 4. Interpret a feature
-
-```bash
-node src/cli.mjs \
-  --workflow adaptive --model gpt-6.1-sol \
-  --packet /path/to/feature/bundle.json \
-  --out runs/feature-sol61 \
-  --source-cache runs/shared-sources \
+  --out runs/my-feature \
   --live --web
 ```
 
-`--live` starts provider requests; `--web` enables literature retrieval.
-Use a fresh output directory for each attempt. The optional source cache shares
-original retrieved passages across runs, while each interpretation retains its
-own evidence, source, and review records.
+Choose a new output directory for each run. To check a packet before starting
+an interpretation, run the same command with `--live --web` omitted.
 
-To run the same workflow with DeepSeek, select `--model deepseek-flash`.
-The manifest records the model, reasoning, retrieval, timing, and output settings
-used for each run.
-
-## Evidence
-
-Agents start with an overview and an evidence index, then retrieve the records
-needed for their current question. Grouped reads make the exported summaries
-available efficiently; individual records remain addressable by ID and JSON
-Pointer.
-
-| Evidence | Questions it helps answer |
+| Model | Selection |
 | --- | --- |
-| Activation census | How broadly does the feature activate across tokens, communities, and studies? |
-| Taxonomy and habitat | Which lineages and environments contribute activations, and which are enriched? |
-| Abundance profiles | Does activation track abundance, within-community rank, or a particular abundance range? |
-| Community context | How do diversity, dominance, and composition differ around active tokens? |
-| Within-OTU and matched comparisons | How does the same organism behave across community contexts? |
-| Public study metadata | Does the signal track an ecological setting, a study, or an assay? |
-| Retrieved literature | Which biological relationships help explain the observed pattern? |
+| GPT-6.1 Sol · high | `--model gpt-6.1-sol` |
+| DeepSeek Flash · max | `--model deepseek-flash` |
 
-Packets expose `core.facts`, selected cases, matched controls, and exported
-`analysis_results`. Event-, community-, and study-level quantities retain their
-respective denominators. Abundance labels are resolved from the packet's codebook,
-and packet metadata records the scope and provenance of the evidence.
+To reuse retrieved literature across features, add
+`--source-cache runs/shared-sources`.
 
-Verified public study accessions remain available for interpretation and source
-lookup. Private identifier checks run locally before live execution.
+## Results
 
-### Source grounding
+Start with these files in your output directory:
 
-Research archives the exact text returned by retrieval, together with its URL,
-timestamp, and content hash. The reviewer can inspect the cited passages directly
-from the shared archive. Source IDs connect the final claims to these records,
-making both the biological explanation and its supporting material easy to inspect.
+| File | What you get |
+| --- | --- |
+| `interpretation.json` | A feature name, biological explanation, and evidence-linked claims |
+| `audit.json` | The reviewer's assessment and any points requiring attention |
+| `sources/` | Retrieved passages, source links, and citation records |
+| `completion.json` | Run status, elapsed time, and token usage |
 
-## Outputs
+Each run also records its evidence and model settings, so you can revisit a
+feature, compare explanations, or build a searchable feature catalogue.
 
-Each run produces a self-contained result directory:
+The explanations connect observations across biological scales: **which taxa
+activate, how their abundance and community context matter, and which ecological
+relationships help explain the pattern**.
 
-```text
-runs/feature-sol61/
-├── interpretation.json     # Feature name, explanation, and evidence-linked claims
-├── audit.json              # Reviewer assessment and material issues
-├── completion.json         # Final status, elapsed time, and aggregate usage
-├── manifest.json           # Model settings, packet hash, and code hashes
-├── packet.json             # Normalized evidence
-├── overview.json           # Evidence index
-├── sources/                # Archived source passages and provenance
-├── interpret/              # Interpreter sessions and request records
-├── research/               # Research sessions, when activated
-└── review/                 # Reviewer sessions and request records
-```
+## Built with
 
-Start with `interpretation.json` and `audit.json`. The completion record reports
-`complete`, `needs_review`, or `failed`, together with research requests and
-revision counts. Session records expose the actual request model, reasoning
-effort, tool activity, and phase-level usage.
+[Pi](https://github.com/earendil-works/pi) provides the agent runtime. Two
+project-specific scientific skills support
+[feature interpretation](skills/sae-interpretation/SKILL.md) and
+[source grounding](skills/source-grounding/SKILL.md), adapting methods from
+[K-Dense Scientific Agent Skills](https://github.com/K-Dense-AI/scientific-agent-skills).
 
-Usage reports separate input, output, and cached-input tokens. Cost fields carry
-Pi's model-catalog estimates; subscription quota is tracked through the provider's
-account interface. Each attempt keeps its own result and usage history.
-
-## Development
-
-The project loads two domain-specific skills in full:
-
-- [`sae-interpretation`](skills/sae-interpretation/SKILL.md): activation statistics,
-  microbial taxonomy, community context, biological interpretation, and review.
-- [`source-grounding`](skills/source-grounding/SKILL.md): research questions,
-  source appraisal, evidence extraction, and claim-level support.
-
-These skills adapt scientific critical-thinking and literature-review methods
-from [K-Dense Scientific Agent Skills](https://github.com/K-Dense-AI/scientific-agent-skills)
-to microbial representation analysis. See [design references](docs/REFERENCES.md)
-and [adaptation attribution](docs/KDENSE_LICENSE.txt).
-
-Run the offline regression suite:
-
-```bash
-node tests/core.test.mjs
-node tests/adaptive.test.mjs
-node tests/terminal_sdk.test.mjs
-python tests/test_repair_packets.py
-```
-
-The tests cover packet normalization, evidence transport, abundance labels,
-source access, role handoffs, review revisions, and terminal report submission.
-SDK tests use synthetic responses and in-memory credentials.
-
-<details>
-<summary>Legacy workflow and comparison tools</summary>
-
-The five-role workflow remains available through `--workflow legacy`:
-
-```text
-observe → literature → critic → synthesis → audit
-```
-
-Each role uses a separate Pi session with an explicit handoff. The CLI's
-compatibility default is `legacy`; the quick-start commands explicitly select
-`adaptive`. A separate `gpt-6-sol` / `high` profile supports historical comparisons.
-
-`scripts/profile_runs.mjs` summarizes phase-level usage and tool activity.
-`scripts/audit_literature_need.mjs` supports claim-level retrieval analysis.
-`scripts/repair_packets.py` rebuilds evidence packets from cached statistics and
-streamed event data. Experiment-specific pilot scripts retain their original
-feature selections and run configurations.
-
-</details>
+See the [design references](docs/REFERENCES.md) and
+[adaptation attribution](docs/KDENSE_LICENSE.txt).
